@@ -1,4 +1,5 @@
 import type { FileMetadata, ResolvedLinks } from '@/ports/IMetadataProvider';
+import { extractTitleKeywords } from './groupByTitleKeywords';
 import { type Cluster, type ClusteringConfig, createCluster, generateClusterId } from './types';
 
 /**
@@ -191,22 +192,136 @@ export function splitByLinkCommunities(
 				result.push(cluster);
 			}
 		} else {
-			// No significant components - all notes are orphans
+			// No significant components - try keyword-based splitting for large clusters
+			if (cluster.noteIds.length > config.maxClusterSize / 2) {
+				const keywordClusters = splitOrphansByTitleKeywords(
+					cluster.noteIds,
+					cluster,
+					metadata,
+					config,
+				);
+				result.push(...keywordClusters);
+			} else {
+				// Keep as-is for smaller clusters
+				result.push(
+					createCluster({
+						id: generateClusterId(),
+						noteIds: cluster.noteIds,
+						folderPath: cluster.folderPath,
+						dominantTags: cluster.dominantTags,
+						candidateNames: ['Uncategorized', ...cluster.candidateNames],
+						internalLinkDensity: 0,
+						reasons: [...cluster.reasons, 'No connected communities found'],
+					}),
+				);
+			}
+		}
+	}
+
+	return result;
+}
+
+/**
+ * Split orphan notes by title keywords when no link communities exist
+ * Extracts meaningful keywords from note titles and groups by most common keywords
+ */
+export function splitOrphansByTitleKeywords(
+	noteIds: string[],
+	parentCluster: Cluster,
+	metadata: Map<string, FileMetadata>,
+	config: ClusteringConfig,
+): Cluster[] {
+	// Build keyword frequency map
+	const keywordToNotes = new Map<string, string[]>();
+	const noteToKeywords = new Map<string, string[]>();
+
+	for (const noteId of noteIds) {
+		// Extract filename from path
+		const filename = noteId.split('/').pop()?.replace(/\.md$/, '') ?? noteId;
+		const keywords = extractTitleKeywords(filename);
+		noteToKeywords.set(noteId, keywords);
+
+		for (const keyword of keywords) {
+			const notes = keywordToNotes.get(keyword) || [];
+			notes.push(noteId);
+			keywordToNotes.set(keyword, notes);
+		}
+	}
+
+	// Find keywords that can form valid clusters (appear in >= minClusterSize notes)
+	const validKeywords = Array.from(keywordToNotes.entries())
+		.filter(([, notes]) => notes.length >= config.minClusterSize)
+		.sort((a, b) => b[1].length - a[1].length);
+
+	if (validKeywords.length === 0) {
+		// No valid keywords found - keep as single cluster
+		return [
+			createCluster({
+				id: generateClusterId(),
+				noteIds,
+				folderPath: parentCluster.folderPath,
+				dominantTags: parentCluster.dominantTags,
+				candidateNames: ['Uncategorized', ...parentCluster.candidateNames],
+				internalLinkDensity: 0,
+				reasons: [...parentCluster.reasons, 'No keyword patterns found for splitting'],
+			}),
+		];
+	}
+
+	// Assign notes to their best keyword group
+	const assigned = new Set<string>();
+	const result: Cluster[] = [];
+
+	for (const [keyword, keywordNotes] of validKeywords) {
+		const unassignedNotes = keywordNotes.filter((id) => !assigned.has(id));
+
+		if (unassignedNotes.length >= config.minClusterSize) {
+			// Create cluster for this keyword
+			for (const noteId of unassignedNotes) {
+				assigned.add(noteId);
+			}
+
 			result.push(
 				createCluster({
 					id: generateClusterId(),
-					noteIds: cluster.noteIds,
-					folderPath: cluster.folderPath,
-					dominantTags: cluster.dominantTags,
-					candidateNames: ['Uncategorized', ...cluster.candidateNames],
+					noteIds: unassignedNotes,
+					folderPath: parentCluster.folderPath,
+					dominantTags: findDominantTagsForNotes(unassignedNotes, metadata, config),
+					candidateNames: [formatKeywordAsName(keyword), ...parentCluster.candidateNames],
 					internalLinkDensity: 0,
-					reasons: [...cluster.reasons, 'No connected communities found'],
+					reasons: [
+						...parentCluster.reasons,
+						`Split by title keyword: '${keyword}' (${unassignedNotes.length} notes)`,
+					],
 				}),
 			);
 		}
 	}
 
+	// Handle remaining unassigned notes
+	const unassigned = noteIds.filter((id) => !assigned.has(id));
+	if (unassigned.length > 0) {
+		result.push(
+			createCluster({
+				id: generateClusterId(),
+				noteIds: unassigned,
+				folderPath: parentCluster.folderPath,
+				dominantTags: [],
+				candidateNames: ['Uncategorized', ...parentCluster.candidateNames],
+				internalLinkDensity: 0,
+				reasons: [...parentCluster.reasons, `Unmatched orphan notes (${unassigned.length} notes)`],
+			}),
+		);
+	}
+
 	return result;
+}
+
+/**
+ * Format a keyword as a cluster name
+ */
+function formatKeywordAsName(keyword: string): string {
+	return keyword.charAt(0).toUpperCase() + keyword.slice(1);
 }
 
 /**

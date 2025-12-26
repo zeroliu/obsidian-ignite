@@ -2,6 +2,7 @@ import type { FileMetadata, ResolvedLinks } from '@/ports/IMetadataProvider';
 import type { FileInfo } from '@/ports/IVaultProvider';
 import { analyzeLinks } from './analyzeLinks';
 import { clusterByFolder } from './clusterByFolder';
+import { enhanceCohesionWithImplicitLinks } from './enhanceCohesionWithImplicitLinks';
 import { filterExcludedPaths } from './filterFiles';
 import { groupByTitleKeywords } from './groupByTitleKeywords';
 import {
@@ -11,6 +12,7 @@ import {
 	preprocessSpecialNotes,
 } from './handleSpecialNotes';
 import { mergeRelatedClusters } from './mergeRelatedClusters';
+import { mergeSmallClustersIntoLarge } from './mergeSmallClustersIntoLarge';
 import { normalizeClusterSizes } from './normalizeClusterSizes';
 import { refineByTags } from './refineByTags';
 import { splitByLinkCommunities } from './splitByLinkCommunities';
@@ -58,8 +60,10 @@ export interface PipelineStats {
  * 4. Merge highly-connected clusters
  * 5. Further refine by title keywords
  * 6. Normalize cluster sizes (split large, merge small)
- * 7. Assign stub notes back to clusters
- * 8. Add template cluster if applicable
+ * 6.5. Merge small clusters into related large clusters
+ * 7. Enhance cohesion with implicit tag links
+ * 8. Assign stub notes back to clusters
+ * 9. Add template cluster if applicable
  *
  * @param input - Pipeline input containing files, metadata, and config
  * @returns Pipeline result with clusters and statistics
@@ -124,7 +128,13 @@ export function runClusteringPipeline(input: PipelineInput): PipelineResult {
 	// Step 6: Normalize cluster sizes
 	clusters = normalizeClusterSizes(clusters, resolvedLinks, config);
 
-	// Step 7: Assign stub notes back to clusters
+	// Step 6.5: Merge small clusters into related large clusters
+	clusters = mergeSmallClustersIntoLarge(clusters, metadata, config);
+
+	// Step 7: Enhance cohesion with implicit tag links
+	clusters = enhanceCohesionWithImplicitLinks(clusters, metadata, config);
+
+	// Step 8: Assign stub notes back to clusters
 	if (stubFiles.length > 0) {
 		clusters = assignStubNotesToClusters(
 			stubFiles.map((f) => f.path),
@@ -134,7 +144,7 @@ export function runClusteringPipeline(input: PipelineInput): PipelineResult {
 		);
 	}
 
-	// Step 8: Add template cluster if applicable
+	// Step 9: Add template cluster if applicable
 	if (templateFiles.length > 0 && !config.excludeTemplates) {
 		const templateCluster = createTemplatesCluster(
 			templateFiles.map((f) => f.path),

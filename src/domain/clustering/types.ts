@@ -56,7 +56,7 @@ export interface ClusteringConfig {
  */
 export const DEFAULT_CLUSTERING_CONFIG: ClusteringConfig = {
 	minClusterSize: 5,
-	maxClusterSize: 500,
+	maxClusterSize: 50,
 	linkDensityThreshold: 0.3,
 	sampleSize: 50,
 	dominantTagThreshold: 0.3,
@@ -65,7 +65,7 @@ export const DEFAULT_CLUSTERING_CONFIG: ClusteringConfig = {
 	stubWordThreshold: 50,
 	excludeTemplates: true,
 	linkSplitDensityThreshold: 0.15,
-	minSizeForLinkSplit: 50,
+	minSizeForLinkSplit: 30,
 };
 
 /**

@@ -27,6 +27,7 @@ export {
 	findConnectedComponents,
 	findCoreNotes,
 	assignNotesToCores,
+	splitOrphansByTitleKeywords,
 } from './splitByLinkCommunities';
 export {
 	mergeRelatedClusters,
@@ -41,6 +42,8 @@ export {
 	isCJK,
 	segmentCJK,
 	extractEnglishKeywords,
+	detectJournalYear,
+	splitByQuarter,
 } from './groupByTitleKeywords';
 export {
 	normalizeClusterSizes,
@@ -55,6 +58,15 @@ export {
 	createTemplatesCluster,
 	preprocessSpecialNotes,
 } from './handleSpecialNotes';
+
+// New improvement modules
+export { mergeSmallClustersIntoLarge } from './mergeSmallClustersIntoLarge';
+export {
+	enhanceCohesionWithImplicitLinks,
+	calculateImplicitLinkDensity,
+	combineExplicitAndImplicitDensity,
+	analyzeTagCohesion,
+} from './enhanceCohesionWithImplicitLinks';
 
 // Pipeline
 export { runClusteringPipeline } from './pipeline';

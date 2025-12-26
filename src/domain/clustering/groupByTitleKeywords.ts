@@ -84,6 +84,124 @@ const CJK_STOP_WORDS: Record<'zh' | 'ja' | 'ko', Set<string>> = {
 };
 
 /**
+ * Detect if a cluster contains journal/daily notes by looking for year patterns
+ * Returns the detected year if >50% of notes contain it, null otherwise
+ */
+export function detectJournalYear(noteIds: string[], files: Map<string, FileInfo>): string | null {
+	const yearPattern = /\b(20\d{2})\b/;
+	const yearCounts = new Map<string, number>();
+
+	for (const noteId of noteIds) {
+		const file = files.get(noteId);
+		if (file) {
+			const match = file.basename.match(yearPattern);
+			if (match) {
+				const year = match[1];
+				yearCounts.set(year, (yearCounts.get(year) || 0) + 1);
+			}
+		}
+	}
+
+	// Find most common year
+	let maxYear: string | null = null;
+	let maxCount = 0;
+	for (const [year, count] of yearCounts) {
+		if (count > maxCount) {
+			maxCount = count;
+			maxYear = year;
+		}
+	}
+
+	// Return year if >50% of notes contain it
+	if (maxYear && maxCount > noteIds.length * 0.5) {
+		return maxYear;
+	}
+
+	return null;
+}
+
+/**
+ * Split notes by quarter based on date patterns in titles
+ * Supports ISO format (2024-01-15) and month names (Jan, January)
+ */
+export function splitByQuarter(
+	noteIds: string[],
+	files: Map<string, FileInfo>,
+	year: string,
+): Map<string, string[]> {
+	const quarters = new Map<string, string[]>();
+	quarters.set('Q1', []);
+	quarters.set('Q2', []);
+	quarters.set('Q3', []);
+	quarters.set('Q4', []);
+	quarters.set('Unknown', []);
+
+	// Month patterns
+	const isoPattern = new RegExp(`${year}-(0[1-9]|1[0-2])`);
+	const monthNames: Record<string, number> = {
+		jan: 1,
+		january: 1,
+		feb: 2,
+		february: 2,
+		mar: 3,
+		march: 3,
+		apr: 4,
+		april: 4,
+		may: 5,
+		jun: 6,
+		june: 6,
+		jul: 7,
+		july: 7,
+		aug: 8,
+		august: 8,
+		sep: 9,
+		september: 9,
+		oct: 10,
+		october: 10,
+		nov: 11,
+		november: 11,
+		dec: 12,
+		december: 12,
+	};
+
+	for (const noteId of noteIds) {
+		const file = files.get(noteId);
+		if (!file) {
+			quarters.get('Unknown')?.push(noteId);
+			continue;
+		}
+
+		const title = file.basename.toLowerCase();
+		let month: number | null = null;
+
+		// Try ISO format first
+		const isoMatch = title.match(isoPattern);
+		if (isoMatch) {
+			month = Number.parseInt(isoMatch[1], 10);
+		} else {
+			// Try month names
+			for (const [name, m] of Object.entries(monthNames)) {
+				if (title.includes(name)) {
+					month = m;
+					break;
+				}
+			}
+		}
+
+		if (month !== null) {
+			if (month <= 3) quarters.get('Q1')?.push(noteId);
+			else if (month <= 6) quarters.get('Q2')?.push(noteId);
+			else if (month <= 9) quarters.get('Q3')?.push(noteId);
+			else quarters.get('Q4')?.push(noteId);
+		} else {
+			quarters.get('Unknown')?.push(noteId);
+		}
+	}
+
+	return quarters;
+}
+
+/**
  * Groups notes within a cluster by title keywords
  * Uses TF-IDF for English and Intl.Segmenter for CJK languages
  *
@@ -100,6 +218,46 @@ export function groupByTitleKeywords(
 	const result: Cluster[] = [];
 
 	for (const cluster of clusters) {
+		// Check if this is a large journal cluster that should be split by quarter
+		if (cluster.noteIds.length > config.maxClusterSize) {
+			const journalYear = detectJournalYear(cluster.noteIds, files);
+			if (journalYear) {
+				const quarterGroups = splitByQuarter(cluster.noteIds, files, journalYear);
+
+				for (const [quarter, notes] of quarterGroups) {
+					if (notes.length >= config.minClusterSize) {
+						result.push(
+							createCluster({
+								noteIds: notes,
+								folderPath: cluster.folderPath,
+								dominantTags: cluster.dominantTags,
+								candidateNames: [`${journalYear} ${quarter}`, ...cluster.candidateNames],
+								reasons: [
+									...cluster.reasons,
+									`Split journal by quarter: ${journalYear} ${quarter} (${notes.length} notes)`,
+								],
+							}),
+						);
+					} else if (notes.length > 0) {
+						// Add to result as-is for merging later
+						result.push(
+							createCluster({
+								noteIds: notes,
+								folderPath: cluster.folderPath,
+								dominantTags: cluster.dominantTags,
+								candidateNames: [`${journalYear} ${quarter}`, ...cluster.candidateNames],
+								reasons: [
+									...cluster.reasons,
+									`Split journal by quarter: ${journalYear} ${quarter} (${notes.length} notes)`,
+								],
+							}),
+						);
+					}
+				}
+				continue;
+			}
+		}
+
 		// Extract titles and keywords
 		const noteTitles = new Map<string, string>();
 		for (const noteId of cluster.noteIds) {
