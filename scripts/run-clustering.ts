@@ -4,12 +4,15 @@
  *
  * Usage:
  *   TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts [options]
+ *   TEST_VAULT_PATH=~/Documents/MyVault VOYAGE_API_KEY=xxx npx tsx scripts/run-clustering.ts --provider voyage [options]
  *
  * Environment:
  *   TEST_VAULT_PATH   Required. Path to the Obsidian vault to test with.
- *   OPENAI_API_KEY    Required for embedding
+ *   OPENAI_API_KEY    Required for OpenAI embedding (default provider)
+ *   VOYAGE_API_KEY    Required for Voyage AI embedding
  *
  * Options:
+ *   --provider <name> Embedding provider: openai (default) or voyage
  *   --config <path>   Custom clustering config JSON
  *   --output <path>   Output file (default: outputs/vault-clusters-v2.json)
  *   --help, -h        Show help
@@ -22,6 +25,8 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {basename, dirname, join} from 'node:path';
 import {OpenAIEmbeddingAdapter} from '../src/adapters/openai/OpenAIEmbeddingAdapter';
+import {VoyageEmbeddingAdapter} from '../src/adapters/voyage/VoyageEmbeddingAdapter';
+import type {IEmbeddingProvider} from '../src/ports/IEmbeddingProvider';
 import {EmbeddingOrchestrator} from '../src/domain/embedding/embedBatch';
 import {EmbeddingCacheManager} from '../src/domain/embedding/cache';
 import {ClusteringPipeline} from '../src/domain/clustering/pipeline';
@@ -85,15 +90,18 @@ async function main() {
 	if (args.includes('--help') || args.includes('-h')) {
 		console.log(`
 Usage: TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts [options]
+       TEST_VAULT_PATH=~/Documents/MyVault VOYAGE_API_KEY=xxx npx tsx scripts/run-clustering.ts --provider voyage [options]
 
 Options:
+  --provider <name> Embedding provider: openai (default) or voyage
   --config <path>   Custom clustering config JSON
   --output <path>   Output file (default: outputs/vault-clusters-v2.json)
   --help, -h        Show help
 
 Environment:
   TEST_VAULT_PATH   Required. Path to the Obsidian vault to test with.
-  OPENAI_API_KEY    Required for embedding
+  OPENAI_API_KEY    Required for OpenAI embedding (default provider)
+  VOYAGE_API_KEY    Required for Voyage AI embedding
 
 Config format:
   {
@@ -106,8 +114,9 @@ Caching:
   Embeddings are cached in <output-dir>/.embedding-cache/ to avoid redundant API calls.
   The cache is content-hash based, so only modified notes are re-embedded.
 
-Example:
+Examples:
   TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=sk-xxx npx tsx scripts/run-clustering.ts --config config.json
+  TEST_VAULT_PATH=~/Documents/MyVault VOYAGE_API_KEY=pa-xxx npx tsx scripts/run-clustering.ts --provider voyage
 `);
 		process.exit(0);
 	}
@@ -115,6 +124,7 @@ Example:
 	// Get vault path from environment
 	const resolvedVaultPath = requireTestVaultPath();
 
+	const providerName = getArg(args, '--provider') ?? 'openai';
 	const configPath = getArg(args, '--config');
 	const outputPath = getArg(args, '--output') ?? 'outputs/vault-clusters-v2.json';
 
@@ -136,14 +146,30 @@ Example:
 		}
 	}
 
-	const apiKey = process.env.OPENAI_API_KEY;
-	if (!apiKey) {
-		console.error('Error: OPENAI_API_KEY environment variable required');
+	// Create embedding provider based on --provider flag
+	let provider: IEmbeddingProvider;
+	if (providerName === 'voyage') {
+		const apiKey = process.env.VOYAGE_API_KEY;
+		if (!apiKey) {
+			console.error('Error: VOYAGE_API_KEY environment variable required for Voyage provider');
+			process.exit(1);
+		}
+		provider = new VoyageEmbeddingAdapter({apiKey});
+	} else if (providerName === 'openai') {
+		const apiKey = process.env.OPENAI_API_KEY;
+		if (!apiKey) {
+			console.error('Error: OPENAI_API_KEY environment variable required for OpenAI provider');
+			process.exit(1);
+		}
+		provider = new OpenAIEmbeddingAdapter({apiKey});
+	} else {
+		console.error(`Error: Unknown provider "${providerName}". Use "openai" or "voyage".`);
 		process.exit(1);
 	}
 
 	console.error(`=== Clustering V2 Pipeline ===`);
 	console.error(`Vault: ${resolvedVaultPath}`);
+	console.error(`Provider: ${provider.getProviderName()} (${provider.getModelName()})`);
 	console.error(`Config: ${configPath ?? 'default'}`);
 	console.error(`Noise reassign threshold: ${config.noiseReassign.threshold}`);
 	console.error('');
@@ -168,8 +194,6 @@ Example:
 	const storage = new FileStorageAdapter(cacheDir);
 	const cache = new EmbeddingCacheManager(storage);
 	await cache.initialize();
-
-	const provider = new OpenAIEmbeddingAdapter({apiKey});
 
 	// Check for provider/model changes (invalidates cache if changed)
 	await cache.setProviderModel(provider.getProviderName(), provider.getModelName());
