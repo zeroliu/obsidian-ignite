@@ -17,12 +17,12 @@ import type { EmbeddingCluster } from './types';
  * Result of noise reassignment
  */
 export interface NoiseReassignResult {
-	/** Updated clusters with reassigned notes */
-	clusters: EmbeddingCluster[];
-	/** Notes that remain as noise (similarity below threshold) */
-	remainingNoise: string[];
-	/** Number of notes reassigned from noise to clusters */
-	reassignedCount: number;
+  /** Updated clusters with reassigned notes */
+  clusters: EmbeddingCluster[];
+  /** Notes that remain as noise (similarity below threshold) */
+  remainingNoise: string[];
+  /** Number of notes reassigned from noise to clusters */
+  reassignedCount: number;
 }
 
 /**
@@ -43,65 +43,65 @@ export interface NoiseReassignResult {
  * @returns Updated clusters and remaining noise notes
  */
 export function reassignNoiseNotes(
-	clusters: EmbeddingCluster[],
-	noiseNotes: string[],
-	embeddings: Map<string, number[]>,
-	threshold: number,
+  clusters: EmbeddingCluster[],
+  noiseNotes: string[],
+  embeddings: Map<string, number[]>,
+  threshold: number,
 ): NoiseReassignResult {
-	if (clusters.length === 0 || noiseNotes.length === 0) {
-		return { clusters, remainingNoise: noiseNotes, reassignedCount: 0 };
-	}
+  if (clusters.length === 0 || noiseNotes.length === 0) {
+    return { clusters, remainingNoise: noiseNotes, reassignedCount: 0 };
+  }
 
-	const remainingNoise: string[] = [];
-	let reassignedCount = 0;
+  const remainingNoise: string[] = [];
+  let reassignedCount = 0;
 
-	// Track which notes get assigned to which clusters
-	const assignments = new Map<string, string[]>();
-	for (const cluster of clusters) {
-		assignments.set(cluster.id, [...cluster.noteIds]);
-	}
+  // Track which notes get assigned to which clusters
+  const assignments = new Map<string, string[]>();
+  for (const cluster of clusters) {
+    assignments.set(cluster.id, [...cluster.noteIds]);
+  }
 
-	for (const notePath of noiseNotes) {
-		const embedding = embeddings.get(notePath);
-		if (!embedding) {
-			remainingNoise.push(notePath);
-			continue;
-		}
+  for (const notePath of noiseNotes) {
+    const embedding = embeddings.get(notePath);
+    if (!embedding) {
+      remainingNoise.push(notePath);
+      continue;
+    }
 
-		// Find nearest cluster by cosine similarity to centroid
-		let bestClusterId: string | null = null;
-		let bestSimilarity = Number.NEGATIVE_INFINITY;
+    // Find nearest cluster by cosine similarity to centroid
+    let bestClusterId: string | null = null;
+    let bestSimilarity = Number.NEGATIVE_INFINITY;
 
-		for (const cluster of clusters) {
-			const similarity = cosineSimilarity(embedding, cluster.centroid);
-			if (similarity > bestSimilarity) {
-				bestSimilarity = similarity;
-				bestClusterId = cluster.id;
-			}
-		}
+    for (const cluster of clusters) {
+      const similarity = cosineSimilarity(embedding, cluster.centroid);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestClusterId = cluster.id;
+      }
+    }
 
-		if (bestClusterId && bestSimilarity >= threshold) {
-			// Assign to nearest cluster
-			const clusterNotes = assignments.get(bestClusterId);
-			if (clusterNotes) {
-				clusterNotes.push(notePath);
-				reassignedCount++;
-			}
-		} else {
-			// Keep as noise - similarity too low
-			remainingNoise.push(notePath);
-		}
-	}
+    if (bestClusterId && bestSimilarity >= threshold) {
+      // Assign to nearest cluster
+      const clusterNotes = assignments.get(bestClusterId);
+      if (clusterNotes) {
+        clusterNotes.push(notePath);
+        reassignedCount++;
+      }
+    } else {
+      // Keep as noise - similarity too low
+      remainingNoise.push(notePath);
+    }
+  }
 
-	// Rebuild clusters with updated noteIds only
-	// Centroids and representative notes will be recomputed by the caller
-	const updatedClusters: EmbeddingCluster[] = clusters.map((cluster) => {
-		const noteIds = assignments.get(cluster.id) || cluster.noteIds;
-		return {
-			...cluster,
-			noteIds,
-		};
-	});
+  // Rebuild clusters with updated noteIds only
+  // Centroids and representative notes will be recomputed by the caller
+  const updatedClusters: EmbeddingCluster[] = clusters.map((cluster) => {
+    const noteIds = assignments.get(cluster.id) || cluster.noteIds;
+    return {
+      ...cluster,
+      noteIds,
+    };
+  });
 
-	return { clusters: updatedClusters, remainingNoise, reassignedCount };
+  return { clusters: updatedClusters, remainingNoise, reassignedCount };
 }
