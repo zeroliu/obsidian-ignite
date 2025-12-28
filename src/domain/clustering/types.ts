@@ -86,6 +86,25 @@ export const DEFAULT_HDBSCAN_CONFIG: HDBSCANConfig = {
 };
 
 /**
+ * Configuration for noise reassignment post-processing
+ *
+ * After HDBSCAN clustering, noise notes are reassigned to their nearest
+ * cluster centroid if the cosine similarity exceeds a threshold. This helps
+ * reduce high noise ratios that are common with density-based clustering.
+ */
+export interface NoiseReassignConfig {
+  /** Minimum cosine similarity to reassign a noise note to a cluster (default: 0.5) */
+  threshold: number;
+}
+
+/**
+ * Default noise reassignment configuration
+ */
+export const DEFAULT_NOISE_REASSIGN_CONFIG: NoiseReassignConfig = {
+  threshold: 0.5,
+};
+
+/**
  * Cluster assignment result from HDBSCAN
  */
 export interface ClusterAssignment {
@@ -116,6 +135,8 @@ export interface ClusteringConfig {
   umap: UMAPConfig;
   /** HDBSCAN configuration */
   hdbscan: HDBSCANConfig;
+  /** Noise reassignment configuration */
+  noiseReassign: NoiseReassignConfig;
   /** Threshold for incremental vs full re-clustering (default: 0.05 = 5%) */
   incrementalThreshold: number;
   /** Minimum notes required to run clustering (default: 10) */
@@ -134,6 +155,7 @@ export interface ClusteringConfig {
 export const DEFAULT_CLUSTERING_CONFIG: ClusteringConfig = {
   umap: DEFAULT_UMAP_CONFIG,
   hdbscan: DEFAULT_HDBSCAN_CONFIG,
+  noiseReassign: DEFAULT_NOISE_REASSIGN_CONFIG,
   incrementalThreshold: 0.05,
   minNotesForClustering: 10,
   representativeCount: 5,
@@ -176,6 +198,13 @@ export interface ClusteringResult {
     noiseCount: number;
     /** Whether this was a full or incremental run */
     wasIncremental: boolean;
+    /** Noise reassignment stats */
+    reassignment?: {
+      /** Original noise count before reassignment */
+      originalNoiseCount: number;
+      /** Number of notes reassigned from noise to clusters */
+      reassignedCount: number;
+    };
   };
 }
 
