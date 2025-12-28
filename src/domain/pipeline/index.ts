@@ -6,6 +6,7 @@ export {
 } from './pathFilter';
 export {
   CLUSTERING_RESULT_VERSION,
+  applyLLMResultsToCluster,
   serializeCluster,
   type PersistedClusteringResult,
   type PipelineProgress,

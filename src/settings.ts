@@ -11,6 +11,8 @@ export interface AIRecallSettings {
   openaiApiKey: string;
   /** Voyage AI API key for embeddings */
   voyageApiKey: string;
+  /** Anthropic API key for LLM concept naming */
+  anthropicApiKey: string;
   /** Paths to exclude from clustering (one glob pattern per line) */
   excludePaths: string;
 }
@@ -22,6 +24,7 @@ export const DEFAULT_SETTINGS: AIRecallSettings = {
   embeddingProvider: 'openai',
   openaiApiKey: '',
   voyageApiKey: '',
+  anthropicApiKey: '',
   excludePaths: '',
 };
 
@@ -132,6 +135,31 @@ export class AIRecallSettingsTab extends PluginSettingTab {
           textareaEl.rows = 5;
           textareaEl.cols = 40;
           textareaEl.style.fontFamily = 'monospace';
+        }
+      });
+
+    // LLM Settings section
+    containerEl.createEl('h3', { text: 'LLM Settings' });
+
+    new Setting(containerEl)
+      .setName('Anthropic API key')
+      .setDesc(
+        'API key for LLM concept naming and refinement. If not provided, the LLM step will be skipped.',
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder('sk-ant-...')
+          .setValue(this.plugin.settings.anthropicApiKey)
+          .onChange(async (value) => {
+            this.plugin.settings.anthropicApiKey = value;
+            await this.plugin.saveSettings();
+          }),
+      )
+      .then((setting) => {
+        const inputEl = setting.controlEl.querySelector('input');
+        if (inputEl) {
+          inputEl.type = 'password';
+          inputEl.autocomplete = 'off';
         }
       });
 

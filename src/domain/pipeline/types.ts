@@ -1,11 +1,12 @@
 import type { ClusteringResult, EmbeddingCluster } from '@/domain/clustering/types';
+import type { MisfitNote, TrackedConcept } from '@/domain/llm/types';
 
 /**
  * Progress update during pipeline execution
  */
 export interface PipelineProgress {
   /** Current stage of the pipeline */
-  stage: 'reading' | 'embedding' | 'clustering' | 'saving';
+  stage: 'reading' | 'embedding' | 'clustering' | 'refining' | 'saving';
   /** Current progress count */
   current: number;
   /** Total items to process */
@@ -39,6 +40,15 @@ export interface SerializedCluster {
   centroid: number[];
   /** Note paths closest to centroid */
   representativeNotes: string[];
+  // LLM-derived fields (optional - only present after LLM step runs)
+  /** Canonical name assigned by LLM */
+  canonicalName?: string;
+  /** Quizzability score (0-1) from LLM assessment */
+  quizzabilityScore?: number;
+  /** Reason if not quizzable (score < 0.4) */
+  nonQuizzableReason?: string;
+  /** Notes identified as misfits for this cluster */
+  misfitNotes?: Array<{ noteId: string; reason: string }>;
 }
 
 /**
@@ -59,6 +69,13 @@ export interface PersistedClusteringResult {
   embeddingProvider: string;
   /** Embedding model used */
   embeddingModel: string;
+  // LLM processing metadata
+  /** Whether LLM refinement was performed */
+  llmRefined?: boolean;
+  /** LLM model used for refinement */
+  llmModel?: string;
+  /** Token usage statistics from LLM */
+  llmTokenUsage?: { inputTokens: number; outputTokens: number };
 }
 
 /**
@@ -80,10 +97,19 @@ export interface PipelineResult {
     tokensProcessed: number;
     estimatedCost: number;
   };
+  /** LLM statistics (null if LLM step was skipped) */
+  llmStats: {
+    conceptsNamed: number;
+    quizzableCount: number;
+    nonQuizzableCount: number;
+    misfitNotesCount: number;
+    tokenUsage: { inputTokens: number; outputTokens: number };
+  } | null;
   /** Timing information */
   timing: {
     embeddingMs: number;
     clusteringMs: number;
+    refiningMs: number;
     totalMs: number;
   };
 }
@@ -110,3 +136,24 @@ export function serializeCluster(cluster: EmbeddingCluster): SerializedCluster {
  * Current schema version for persisted clustering results
  */
 export const CLUSTERING_RESULT_VERSION = 1;
+
+/**
+ * Apply LLM results to a serialized cluster
+ */
+export function applyLLMResultsToCluster(
+  cluster: SerializedCluster,
+  concept: TrackedConcept | undefined,
+  misfitNotes: MisfitNote[],
+): SerializedCluster {
+  if (!concept) {
+    return cluster;
+  }
+  return {
+    ...cluster,
+    canonicalName: concept.canonicalName,
+    quizzabilityScore: concept.quizzabilityScore,
+    misfitNotes: misfitNotes
+      .filter((m) => cluster.noteIds.includes(m.noteId))
+      .map((m) => ({ noteId: m.noteId, reason: m.reason })),
+  };
+}

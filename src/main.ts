@@ -1,3 +1,4 @@
+import { AnthropicLLMAdapter } from '@/adapters/anthropic/AnthropicLLMAdapter';
 import {
   ObsidianMetadataAdapter,
   ObsidianStorageAdapter,
@@ -7,6 +8,7 @@ import { OpenAIEmbeddingAdapter } from '@/adapters/openai/OpenAIEmbeddingAdapter
 import { VoyageEmbeddingAdapter } from '@/adapters/voyage/VoyageEmbeddingAdapter';
 import { PipelineOrchestrator, parseExcludePatterns } from '@/domain/pipeline';
 import type { IEmbeddingProvider } from '@/ports/IEmbeddingProvider';
+import type { ILLMProvider } from '@/ports/ILLMProvider';
 import { type AIRecallSettings, AIRecallSettingsTab, DEFAULT_SETTINGS } from '@/settings';
 import { Notice, Plugin } from 'obsidian';
 
@@ -91,6 +93,12 @@ export default class AIRecallPlugin extends Plugin {
       return;
     }
 
+    // Create LLM provider if Anthropic key is configured
+    let llmProvider: ILLMProvider | null = null;
+    if (this.settings.anthropicApiKey) {
+      llmProvider = new AnthropicLLMAdapter(this.settings.anthropicApiKey);
+    }
+
     // Create adapters
     const vaultAdapter = new ObsidianVaultAdapter(this.app);
     const metadataAdapter = new ObsidianMetadataAdapter(this.app);
@@ -106,6 +114,7 @@ export default class AIRecallPlugin extends Plugin {
       storageAdapter,
       embeddingProvider,
       excludePatterns,
+      llmProvider,
     );
 
     // Show status notice
@@ -127,8 +136,13 @@ export default class AIRecallPlugin extends Plugin {
       const excludedInfo =
         result.excludedCount > 0 ? `\n${result.excludedCount} paths excluded` : '';
 
+      const llmInfo =
+        result.llmStats !== null
+          ? `\n${result.llmStats.conceptsNamed} concepts named (${result.llmStats.quizzableCount} quizzable)`
+          : '';
+
       new Notice(
-        `Clustering complete!\n${result.clusterCount} clusters found\n${result.totalNotes} notes processed${excludedInfo}\n${result.noiseCount} noise notes\nTime: ${(result.timing.totalMs / 1000).toFixed(1)}s${costInfo}`,
+        `Clustering complete!\n${result.clusterCount} clusters found\n${result.totalNotes} notes processed${excludedInfo}\n${result.noiseCount} noise notes${llmInfo}\nTime: ${(result.timing.totalMs / 1000).toFixed(1)}s${costInfo}`,
         8000,
       );
 

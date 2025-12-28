@@ -1,7 +1,10 @@
 import { ClusteringPipeline } from '@/domain/clustering/pipeline';
+import { toLegacyCluster } from '@/domain/clustering/types';
 import { EmbeddingCacheManager } from '@/domain/embedding/cache';
 import { EmbeddingOrchestrator } from '@/domain/embedding/embedBatch';
+import { type LLMPipelineResult, runLLMPipeline } from '@/domain/llm/pipeline';
 import type { IEmbeddingProvider } from '@/ports/IEmbeddingProvider';
+import type { ILLMProvider } from '@/ports/ILLMProvider';
 import type { IMetadataProvider, ResolvedLinks } from '@/ports/IMetadataProvider';
 import type { IStorageAdapter } from '@/ports/IStorageAdapter';
 import type { FileInfo, IVaultProvider } from '@/ports/IVaultProvider';
@@ -11,6 +14,7 @@ import {
   type PersistedClusteringResult,
   type PipelineProgress,
   type PipelineResult,
+  applyLLMResultsToCluster,
   serializeCluster,
 } from './types';
 
@@ -32,7 +36,8 @@ const CLUSTERS_STORAGE_KEY = 'clusters';
  * 1. Reading - Scan vault for markdown files
  * 2. Embedding - Generate embeddings for notes (with caching)
  * 3. Clustering - UMAP dimensionality reduction + HDBSCAN clustering
- * 4. Saving - Persist results to .recall/clusters.json
+ * 4. Refining - LLM concept naming and quizzability scoring (optional)
+ * 5. Saving - Persist results to .recall/clusters.json
  */
 export class PipelineOrchestrator {
   constructor(
@@ -41,6 +46,7 @@ export class PipelineOrchestrator {
     private storageAdapter: IStorageAdapter,
     private embeddingProvider: IEmbeddingProvider,
     private excludePatterns: string[] = [],
+    private llmProvider: ILLMProvider | null = null,
   ) {}
 
   /**
@@ -74,7 +80,13 @@ export class PipelineOrchestrator {
         noiseCount: 0,
         excludedCount,
         embeddingStats: { cacheHits: 0, cacheMisses: 0, tokensProcessed: 0, estimatedCost: 0 },
-        timing: { embeddingMs: 0, clusteringMs: 0, totalMs: Date.now() - totalStartTime },
+        llmStats: null,
+        timing: {
+          embeddingMs: 0,
+          clusteringMs: 0,
+          refiningMs: 0,
+          totalMs: Date.now() - totalStartTime,
+        },
       };
     }
 
@@ -133,17 +145,62 @@ export class PipelineOrchestrator {
       `Found ${clusteringResult.result.clusters.length} clusters`,
     );
 
-    // Stage 4: Saving results
+    // Stage 4: LLM Refining (optional)
+    let llmResult: LLMPipelineResult | null = null;
+    let refiningMs = 0;
+
+    if (this.llmProvider !== null) {
+      const refiningStartTime = Date.now();
+      this.reportProgress(onProgress, 'refining', 0, 1, 'Naming concepts with LLM...');
+
+      try {
+        const clustersForLLM = clusteringResult.result.clusters.map(toLegacyCluster);
+        llmResult = await runLLMPipeline({
+          clusters: clustersForLLM,
+          fileMap: files,
+          llmProvider: this.llmProvider,
+        });
+        this.reportProgress(
+          onProgress,
+          'refining',
+          1,
+          1,
+          `Named ${llmResult.stats.totalConcepts} concepts`,
+        );
+      } catch (error) {
+        console.warn('LLM refinement failed:', error);
+        this.reportProgress(onProgress, 'refining', 0, 1, 'LLM refinement failed');
+      }
+
+      refiningMs = Date.now() - refiningStartTime;
+    }
+
+    // Stage 5: Saving results
     this.reportProgress(onProgress, 'saving', 0, 1, 'Saving results...');
+
+    // Build concept lookup map for merging LLM results
+    const conceptMap = new Map(llmResult?.concepts.map((c) => [c.clusterId, c]) ?? []);
+
+    const serializedClusters = clusteringResult.result.clusters.map((cluster) => {
+      const base = serializeCluster(cluster);
+      return applyLLMResultsToCluster(
+        base,
+        conceptMap.get(cluster.id),
+        llmResult?.misfitNotes ?? [],
+      );
+    });
 
     const persistedResult: PersistedClusteringResult = {
       version: CLUSTERING_RESULT_VERSION,
       timestamp: Date.now(),
       stats: clusteringResult.result.stats,
-      clusters: clusteringResult.result.clusters.map(serializeCluster),
+      clusters: serializedClusters,
       noiseNotes: clusteringResult.result.noiseNotes,
       embeddingProvider: this.embeddingProvider.getProviderName(),
       embeddingModel: this.embeddingProvider.getModelName(),
+      llmRefined: llmResult !== null,
+      llmModel: llmResult !== null ? this.llmProvider?.getConfig().model : undefined,
+      llmTokenUsage: llmResult?.stats.tokenUsage,
     };
 
     await this.storageAdapter.write(CLUSTERS_STORAGE_KEY, persistedResult);
@@ -161,9 +218,20 @@ export class PipelineOrchestrator {
         tokensProcessed: embeddingResult.stats.tokensProcessed,
         estimatedCost: embeddingResult.stats.estimatedCost,
       },
+      llmStats:
+        llmResult !== null
+          ? {
+              conceptsNamed: llmResult.stats.totalConcepts,
+              quizzableCount: llmResult.stats.quizzableConceptCount,
+              nonQuizzableCount: llmResult.stats.nonQuizzableConceptCount,
+              misfitNotesCount: llmResult.stats.misfitNotesRemoved,
+              tokenUsage: llmResult.stats.tokenUsage,
+            }
+          : null,
       timing: {
         embeddingMs,
         clusteringMs,
+        refiningMs,
         totalMs: Date.now() - totalStartTime,
       },
     };
