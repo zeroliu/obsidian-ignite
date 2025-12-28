@@ -22,9 +22,116 @@ gh pr status
 
 Confirm there is an open PR for the current branch before proceeding.
 
-### 2. Merge the Pull Request
+### 2. Detect Worktree Context
 
-Merge the PR using squash merge (or the repository's default merge strategy):
+Check if we're in a git worktree (not the main repo):
+
+```bash
+test -f .git && echo "worktree" || echo "main repo"
+```
+
+If `.git` is a file, we're in a worktree. **Follow the Worktree Workflow below.**
+If `.git` is a directory, we're in the main repo. **Follow the Main Repo Workflow below.**
+
+---
+
+## Worktree Workflow
+
+Use this workflow when running from a git worktree.
+
+### W1. Save Context Before Navigating Away
+
+Before doing anything destructive, save the current context:
+
+```bash
+BRANCH_NAME=$(git branch --show-current)
+WORKTREE_PATH=$(pwd)
+MAIN_REPO=$(git worktree list --porcelain | grep -m1 "^worktree " | cut -d' ' -f2)
+echo "Branch: $BRANCH_NAME"
+echo "Worktree: $WORKTREE_PATH"
+echo "Main repo: $MAIN_REPO"
+```
+
+### W2. Navigate to Main Repo First
+
+**Critical:** Navigate to the main repo BEFORE any destructive operations. This prevents "path does not exist" errors after the worktree is removed.
+
+```bash
+cd "$MAIN_REPO"
+```
+
+### W3. Merge the PR (Without Local Checkout)
+
+Merge the PR without the `--delete-branch` flag (which tries to checkout main locally):
+
+```bash
+gh pr merge --squash
+```
+
+If the user prefers a different merge strategy:
+- `gh pr merge --merge` (merge commit)
+- `gh pr merge --rebase` (rebase)
+
+### W4. Delete Remote Branch
+
+Delete the remote branch manually:
+
+```bash
+git push origin --delete "$BRANCH_NAME"
+```
+
+Note: This may fail if the branch was already deleted by GitHub's auto-delete setting. That's fine.
+
+### W5. Remove the Worktree
+
+Remove the worktree from the main repo:
+
+```bash
+git worktree remove "$WORKTREE_PATH"
+```
+
+If there are uncommitted changes blocking removal, confirm with user then use:
+```bash
+git worktree remove --force "$WORKTREE_PATH"
+```
+
+### W6. Clean Up Local Branch
+
+Delete the local branch:
+
+```bash
+git branch -d "$BRANCH_NAME"
+```
+
+Use `-D` (force delete) only if `-d` fails and you're certain the branch was merged.
+
+### W7. Pull Latest Changes
+
+Pull the latest changes on main:
+
+```bash
+git pull origin main
+```
+
+### W8. Confirm Cleanup
+
+Verify everything was cleaned up:
+
+```bash
+git worktree list
+git branch
+git log --oneline -3
+```
+
+---
+
+## Main Repo Workflow
+
+Use this workflow when running from the main repo (not a worktree).
+
+### M1. Merge the Pull Request
+
+Merge the PR using squash merge:
 
 ```bash
 gh pr merge --squash --delete-branch
@@ -32,11 +139,11 @@ gh pr merge --squash --delete-branch
 
 Note: `--delete-branch` deletes the remote branch after merging.
 
-If the user prefers a different merge strategy, use one of:
+If the user prefers a different merge strategy:
 - `gh pr merge --merge --delete-branch` (merge commit)
 - `gh pr merge --rebase --delete-branch` (rebase)
 
-### 3. Checkout Main Branch
+### M2. Checkout Main Branch
 
 Switch back to the main branch:
 
@@ -44,7 +151,7 @@ Switch back to the main branch:
 git checkout main
 ```
 
-### 4. Pull Latest Changes
+### M3. Pull Latest Changes
 
 Pull the latest changes from the remote:
 
@@ -52,7 +159,7 @@ Pull the latest changes from the remote:
 git pull origin main
 ```
 
-### 5. Clean Up Local Branch
+### M4. Clean Up Local Branch
 
 The remote branch was already deleted by `--delete-branch`. Now delete the local branch:
 
@@ -62,55 +169,7 @@ git branch -d <branch-name>
 
 Use `-D` (force delete) only if `-d` fails and you're certain the branch was merged.
 
-### 6. Clean Up Git Worktree (if applicable)
-
-Check if we were working in a git worktree:
-
-```bash
-git rev-parse --git-dir
-```
-
-If the output shows a path like `../<main-repo>/.git/worktrees/<name>`, we're in a worktree.
-
-Alternatively, check if `.git` is a file (worktree) rather than a directory (main repo):
-
-```bash
-test -f .git && echo "worktree" || echo "main repo"
-```
-
-If in a worktree:
-
-1. Get the current worktree path before navigating away:
-   ```bash
-   WORKTREE_PATH=$(pwd)
-   ```
-
-2. Get the main repository path:
-   ```bash
-   git worktree list --porcelain | grep -m1 "^worktree " | cut -d' ' -f2
-   ```
-
-3. Navigate to the main repository:
-   ```bash
-   cd <main-repo-path>
-   ```
-
-4. Remove the worktree:
-   ```bash
-   git worktree remove "$WORKTREE_PATH"
-   ```
-
-   If there are uncommitted changes blocking removal, use `--force`:
-   ```bash
-   git worktree remove --force "$WORKTREE_PATH"
-   ```
-
-5. Verify the worktree was removed:
-   ```bash
-   git worktree list
-   ```
-
-### 7. Confirm Cleanup
+### M5. Confirm Cleanup
 
 Verify the cleanup was successful:
 
@@ -119,11 +178,13 @@ git branch
 git log --oneline -3
 ```
 
+---
+
 ## Important Notes
 
 - Always verify the PR is approved and CI checks pass before merging
 - Never force merge a PR that has failing checks
 - If merge conflicts exist, inform the user and do not proceed
 - The branch name for cleanup is the branch you were on before checking out main
-- When in a worktree, `git worktree remove` handles both unlinking and deleting the folder
+- When in a worktree, navigate to the main repo BEFORE any destructive operations
 - If the worktree has uncommitted changes, confirm with the user before force removing
