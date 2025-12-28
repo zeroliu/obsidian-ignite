@@ -37,7 +37,7 @@
     "obsidian": "^1.7.2",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^4.0.16"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

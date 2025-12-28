@@ -4,11 +4,10 @@ import { VoyageEmbeddingAdapter } from '../VoyageEmbeddingAdapter';
 describe('VoyageEmbeddingAdapter', () => {
 	let adapter: VoyageEmbeddingAdapter;
 	const originalFetch = global.fetch;
-	let mockFetch: ReturnType<typeof vi.fn>;
+	const mockFetch = vi.fn();
 
 	beforeAll(() => {
-		mockFetch = vi.fn();
-		global.fetch = mockFetch;
+		global.fetch = mockFetch as unknown as typeof fetch;
 	});
 
 	afterAll(() => {

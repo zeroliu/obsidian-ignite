@@ -13,14 +13,14 @@ function createAPIError(status: number, message: string): Error & { status: numb
 	return error;
 }
 
-// Mock OpenAI module
+// Mock OpenAI module with a class (required for Vitest 4.x)
 vi.mock('openai', () => {
 	return {
-		default: vi.fn().mockImplementation(() => ({
-			embeddings: {
+		default: class MockOpenAI {
+			embeddings = {
 				create: mockCreate,
-			},
-		})),
+			};
+		},
 	};
 });
 
