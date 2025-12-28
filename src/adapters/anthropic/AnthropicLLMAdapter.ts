@@ -1,7 +1,7 @@
 import {
-	CONCEPT_NAMING_SYSTEM_PROMPT,
-	buildConceptNamingPrompt,
-	parseNamingResponse,
+  CONCEPT_NAMING_SYSTEM_PROMPT,
+  buildConceptNamingPrompt,
+  parseNamingResponse,
 } from '@/domain/llm/prompts';
 import type { ConceptNamingRequest, ConceptNamingResponse, LLMConfig } from '@/domain/llm/types';
 import { DEFAULT_LLM_CONFIG } from '@/domain/llm/types';
@@ -12,14 +12,14 @@ import Anthropic from '@anthropic-ai/sdk';
  * Error thrown when LLM API call fails
  */
 export class LLMApiError extends Error {
-	constructor(
-		message: string,
-		public readonly statusCode?: number,
-		public readonly isRetryable: boolean = false,
-	) {
-		super(message);
-		this.name = 'LLMApiError';
-	}
+  constructor(
+    message: string,
+    public readonly statusCode?: number,
+    public readonly isRetryable: boolean = false,
+  ) {
+    super(message);
+    this.name = 'LLMApiError';
+  }
 }
 
 /**
@@ -29,140 +29,140 @@ export class LLMApiError extends Error {
  * Stage 3 (naming) and Stage 3.5 (refinement) are merged into a single call.
  */
 export class AnthropicLLMAdapter implements ILLMProvider {
-	private client: Anthropic;
-	private config: LLMConfig;
+  private client: Anthropic;
+  private config: LLMConfig;
 
-	constructor(apiKey: string, config?: Partial<LLMConfig>) {
-		this.client = new Anthropic({ apiKey });
-		this.config = { ...DEFAULT_LLM_CONFIG, ...config, apiKey };
-	}
+  constructor(apiKey: string, config?: Partial<LLMConfig>) {
+    this.client = new Anthropic({ apiKey });
+    this.config = { ...DEFAULT_LLM_CONFIG, ...config, apiKey };
+  }
 
-	async nameConceptsBatch(request: ConceptNamingRequest): Promise<ConceptNamingResponse> {
-		const userPrompt = buildConceptNamingPrompt(request.clusters);
+  async nameConceptsBatch(request: ConceptNamingRequest): Promise<ConceptNamingResponse> {
+    const userPrompt = buildConceptNamingPrompt(request.clusters);
 
-		const response = await this.callWithRetry(CONCEPT_NAMING_SYSTEM_PROMPT, userPrompt);
+    const response = await this.callWithRetry(CONCEPT_NAMING_SYSTEM_PROMPT, userPrompt);
 
-		const results = parseNamingResponse(response.content);
+    const results = parseNamingResponse(response.content);
 
-		return {
-			results,
-			usage: response.usage,
-		};
-	}
+    return {
+      results,
+      usage: response.usage,
+    };
+  }
 
-	getConfig(): LLMConfig {
-		return { ...this.config };
-	}
+  getConfig(): LLMConfig {
+    return { ...this.config };
+  }
 
-	updateConfig(config: Partial<LLMConfig>): void {
-		this.config = { ...this.config, ...config };
+  updateConfig(config: Partial<LLMConfig>): void {
+    this.config = { ...this.config, ...config };
 
-		// Update API key if provided
-		if (config.apiKey) {
-			this.client = new Anthropic({ apiKey: config.apiKey });
-		}
-	}
+    // Update API key if provided
+    if (config.apiKey) {
+      this.client = new Anthropic({ apiKey: config.apiKey });
+    }
+  }
 
-	/**
-	 * Call the API with retry logic for transient errors
-	 */
-	private async callWithRetry(
-		systemPrompt: string,
-		userPrompt: string,
-	): Promise<{ content: string; usage: { inputTokens: number; outputTokens: number } }> {
-		let lastError: Error | null = null;
-		let delay = this.config.retryBaseDelay;
+  /**
+   * Call the API with retry logic for transient errors
+   */
+  private async callWithRetry(
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<{ content: string; usage: { inputTokens: number; outputTokens: number } }> {
+    let lastError: Error | null = null;
+    let delay = this.config.retryBaseDelay;
 
-		for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
-			try {
-				return await this.callApi(systemPrompt, userPrompt);
-			} catch (error) {
-				lastError = error as Error;
+    for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+      try {
+        return await this.callApi(systemPrompt, userPrompt);
+      } catch (error) {
+        lastError = error as Error;
 
-				// Check if error is retryable
-				if (error instanceof LLMApiError && !error.isRetryable) {
-					throw error;
-				}
+        // Check if error is retryable
+        if (error instanceof LLMApiError && !error.isRetryable) {
+          throw error;
+        }
 
-				// Don't retry on last attempt
-				if (attempt === this.config.maxRetries) {
-					throw error;
-				}
+        // Don't retry on last attempt
+        if (attempt === this.config.maxRetries) {
+          throw error;
+        }
 
-				// Wait with exponential backoff
-				await this.sleep(delay);
-				delay *= 2;
-			}
-		}
+        // Wait with exponential backoff
+        await this.sleep(delay);
+        delay *= 2;
+      }
+    }
 
-		throw lastError || new Error('Unknown error during API call');
-	}
+    throw lastError || new Error('Unknown error during API call');
+  }
 
-	/**
-	 * Make a single API call
-	 */
-	private async callApi(
-		systemPrompt: string,
-		userPrompt: string,
-	): Promise<{ content: string; usage: { inputTokens: number; outputTokens: number } }> {
-		try {
-			const message = await this.client.messages.create({
-				model: this.config.model,
-				max_tokens: this.config.maxTokens,
-				temperature: this.config.temperature,
-				system: systemPrompt,
-				messages: [
-					{
-						role: 'user',
-						content: userPrompt,
-					},
-				],
-			});
+  /**
+   * Make a single API call
+   */
+  private async callApi(
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<{ content: string; usage: { inputTokens: number; outputTokens: number } }> {
+    try {
+      const message = await this.client.messages.create({
+        model: this.config.model,
+        max_tokens: this.config.maxTokens,
+        temperature: this.config.temperature,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
+      });
 
-			// Extract text content from response
-			const textContent = message.content.find((block) => block.type === 'text');
-			if (!textContent || textContent.type !== 'text') {
-				throw new LLMApiError('No text content in response');
-			}
+      // Extract text content from response
+      const textContent = message.content.find((block) => block.type === 'text');
+      if (!textContent || textContent.type !== 'text') {
+        throw new LLMApiError('No text content in response');
+      }
 
-			return {
-				content: textContent.text,
-				usage: {
-					inputTokens: message.usage.input_tokens,
-					outputTokens: message.usage.output_tokens,
-				},
-			};
-		} catch (error) {
-			// Handle Anthropic API errors (check by name or status property for testability)
-			const apiError = error as { status?: number; message?: string; name?: string };
-			if (apiError.status !== undefined) {
-				const statusCode = apiError.status;
-				const isRetryable = this.isRetryableError(statusCode);
+      return {
+        content: textContent.text,
+        usage: {
+          inputTokens: message.usage.input_tokens,
+          outputTokens: message.usage.output_tokens,
+        },
+      };
+    } catch (error) {
+      // Handle Anthropic API errors (check by name or status property for testability)
+      const apiError = error as { status?: number; message?: string; name?: string };
+      if (apiError.status !== undefined) {
+        const statusCode = apiError.status;
+        const isRetryable = this.isRetryableError(statusCode);
 
-				throw new LLMApiError(apiError.message || 'API error', statusCode, isRetryable);
-			}
+        throw new LLMApiError(apiError.message || 'API error', statusCode, isRetryable);
+      }
 
-			// Handle network errors
-			if (error instanceof Error && error.message.includes('network')) {
-				throw new LLMApiError(error.message, undefined, true);
-			}
+      // Handle network errors
+      if (error instanceof Error && error.message.includes('network')) {
+        throw new LLMApiError(error.message, undefined, true);
+      }
 
-			throw error;
-		}
-	}
+      throw error;
+    }
+  }
 
-	/**
-	 * Check if an error status code is retryable
-	 */
-	private isRetryableError(statusCode: number): boolean {
-		// 429 = Rate limit, 5xx = Server errors
-		return statusCode === 429 || (statusCode >= 500 && statusCode < 600);
-	}
+  /**
+   * Check if an error status code is retryable
+   */
+  private isRetryableError(statusCode: number): boolean {
+    // 429 = Rate limit, 5xx = Server errors
+    return statusCode === 429 || (statusCode >= 500 && statusCode < 600);
+  }
 
-	/**
-	 * Sleep for a specified duration
-	 */
-	private sleep(ms: number): Promise<void> {
-		return new Promise((resolve) => setTimeout(resolve, ms));
-	}
+  /**
+   * Sleep for a specified duration
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 }

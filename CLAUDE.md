@@ -66,7 +66,9 @@ The `src/domain/llm/` module refines clusters into quizzable concepts:
 
 ### Code Style
 
-- Biome for linting/formatting (tabs, single quotes, semicolons)
+- Biome for linting/formatting (2 spaces, single quotes, semicolons)
+- Always use absolute imports with `@/` prefix (e.g., `import { Foo } from '@/domain/foo'`)
+- Never use relative imports with `../` (use `@/` path alias instead)
 - Strict TypeScript with strict null checks
 - `noNonNullAssertion` is a warning (allowed but discouraged)
 - Never use `any` to get rid of type errors. Figure out the right type always.

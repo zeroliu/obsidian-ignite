@@ -1,24 +1,24 @@
 // Types
 export type {
-	Cluster,
-	UMAPConfig,
-	HDBSCANConfig,
-	ClusterAssignment,
-	EmbeddingCluster,
-	ClusteringConfig,
-	ClusteringInput,
-	ClusteringResult,
-	ClusteringState,
+  Cluster,
+  UMAPConfig,
+  HDBSCANConfig,
+  ClusterAssignment,
+  EmbeddingCluster,
+  ClusteringConfig,
+  ClusteringInput,
+  ClusteringResult,
+  ClusteringState,
 } from './types';
 
 export {
-	createCluster,
-	generateClusterId,
-	DEFAULT_UMAP_CONFIG,
-	DEFAULT_HDBSCAN_CONFIG,
-	DEFAULT_CLUSTERING_CONFIG,
-	toLegacyCluster,
-	generateEmbeddingClusterId,
+  createCluster,
+  generateClusterId,
+  DEFAULT_UMAP_CONFIG,
+  DEFAULT_HDBSCAN_CONFIG,
+  DEFAULT_CLUSTERING_CONFIG,
+  toLegacyCluster,
+  generateEmbeddingClusterId,
 } from './types';
 
 // UMAP Reducer
@@ -31,26 +31,26 @@ export type { HDBSCANResult } from './hdbscanClusterer';
 
 // Centroid Calculator
 export {
-	computeCentroid,
-	cosineSimilarity,
-	euclideanDistance,
-	selectRepresentatives,
-	computeClusterCentroids,
-	findNearestCentroid,
+  computeCentroid,
+  cosineSimilarity,
+  euclideanDistance,
+  selectRepresentatives,
+  computeClusterCentroids,
+  findNearestCentroid,
 } from './centroidCalculator';
 export type { ClusterCentroidResult } from './centroidCalculator';
 
 // Incremental Updater
 export {
-	detectChanges,
-	assignNotesToClusters,
-	applyIncrementalUpdate,
-	updateClusteringState,
+  detectChanges,
+  assignNotesToClusters,
+  applyIncrementalUpdate,
+  updateClusteringState,
 } from './incrementalUpdater';
 export type {
-	ChangeDetectionResult,
-	IncrementalUpdateResult,
-	NoteAssignment,
+  ChangeDetectionResult,
+  IncrementalUpdateResult,
+  NoteAssignment,
 } from './incrementalUpdater';
 
 // Pipeline

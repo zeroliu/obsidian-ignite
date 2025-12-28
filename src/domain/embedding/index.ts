@@ -1,13 +1,13 @@
 // Types
 export type {
-	CachedNoteEmbedding,
-	EmbeddedNote,
-	EmbeddingChunk,
-	EmbeddingIndex,
-	EmbeddingIndexEntry,
-	EmbeddingStats,
-	PreparedNote,
-	TextPrepareConfig,
+  CachedNoteEmbedding,
+  EmbeddedNote,
+  EmbeddingChunk,
+  EmbeddingIndex,
+  EmbeddingIndexEntry,
+  EmbeddingStats,
+  PreparedNote,
+  TextPrepareConfig,
 } from './types';
 export { DEFAULT_TEXT_PREPARE_CONFIG } from './types';
 
@@ -16,14 +16,14 @@ export { estimateTokens } from './tokenUtils';
 
 // Text preparation
 export {
-	generateContentHash,
-	hashString,
-	normalizeWhitespace,
-	prepareTextForEmbedding,
-	stripFrontmatter,
-	stripImages,
-	summarizeCodeBlocks,
-	truncateToTokenLimit,
+  generateContentHash,
+  hashString,
+  normalizeWhitespace,
+  prepareTextForEmbedding,
+  stripFrontmatter,
+  stripImages,
+  summarizeCodeBlocks,
+  truncateToTokenLimit,
 } from './prepareText';
 
 // Cache
@@ -32,10 +32,10 @@ export { DEFAULT_CACHE_CONFIG, EmbeddingCacheManager } from './cache';
 
 // Batch embedding
 export type {
-	EmbeddingOrchestratorConfig,
-	EmbeddingProgressCallback,
-	EmbeddingResult,
-	NoteForEmbedding,
+  EmbeddingOrchestratorConfig,
+  EmbeddingProgressCallback,
+  EmbeddingResult,
+  NoteForEmbedding,
 } from './embedBatch';
 export { DEFAULT_ORCHESTRATOR_CONFIG, EmbeddingOrchestrator } from './embedBatch';
 

@@ -1,113 +1,113 @@
-import { describe, expect, it } from 'vitest';
 import {
-	CONCEPT_NAMING_SYSTEM_PROMPT,
-	buildConceptNamingPrompt,
-	parseNamingResponse,
-} from '../prompts';
-import type { ClusterSummary } from '../types';
+  CONCEPT_NAMING_SYSTEM_PROMPT,
+  buildConceptNamingPrompt,
+  parseNamingResponse,
+} from '@/domain/llm/prompts';
+import type { ClusterSummary } from '@/domain/llm/types';
+import { describe, expect, it } from 'vitest';
 
 describe('prompts', () => {
-	describe('system prompts', () => {
-		it('should have concept naming system prompt with misfit detection', () => {
-			expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('concept name');
-			expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('quizzability');
-			expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('misfit');
-			expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('JSON');
-		});
-	});
+  describe('system prompts', () => {
+    it('should have concept naming system prompt with misfit detection', () => {
+      expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('concept name');
+      expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('quizzability');
+      expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('misfit');
+      expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('JSON');
+    });
+  });
 
-	describe('buildConceptNamingPrompt', () => {
-		it('should build prompt with cluster information', () => {
-			const clusters: ClusterSummary[] = [
-				{
-					clusterId: 'cluster-1',
-					candidateNames: ['React', 'Frontend'],
-					representativeTitles: ['Hooks Guide', 'State Management'],
-					commonTags: ['#react', '#frontend'],
-					folderPath: 'tech/react',
-					noteCount: 45,
-				},
-			];
+  describe('buildConceptNamingPrompt', () => {
+    it('should build prompt with cluster information', () => {
+      const clusters: ClusterSummary[] = [
+        {
+          clusterId: 'cluster-1',
+          candidateNames: ['React', 'Frontend'],
+          representativeTitles: ['Hooks Guide', 'State Management'],
+          commonTags: ['#react', '#frontend'],
+          folderPath: 'tech/react',
+          noteCount: 45,
+        },
+      ];
 
-			const prompt = buildConceptNamingPrompt(clusters);
+      const prompt = buildConceptNamingPrompt(clusters);
 
-			expect(prompt).toContain('cluster-1');
-			expect(prompt).toContain('React, Frontend');
-			expect(prompt).toContain('Hooks Guide');
-			expect(prompt).toContain('#react');
-			expect(prompt).toContain('tech/react');
-			expect(prompt).toContain('45');
-		});
+      expect(prompt).toContain('cluster-1');
+      expect(prompt).toContain('React, Frontend');
+      expect(prompt).toContain('Hooks Guide');
+      expect(prompt).toContain('#react');
+      expect(prompt).toContain('tech/react');
+      expect(prompt).toContain('45');
+    });
 
-		it('should handle multiple clusters', () => {
-			const clusters: ClusterSummary[] = [
-				{
-					clusterId: 'cluster-1',
-					candidateNames: ['React'],
-					representativeTitles: ['Note 1'],
-					commonTags: [],
-					folderPath: '',
-					noteCount: 10,
-				},
-				{
-					clusterId: 'cluster-2',
-					candidateNames: ['Python'],
-					representativeTitles: ['Note 2'],
-					commonTags: [],
-					folderPath: '',
-					noteCount: 20,
-				},
-			];
+    it('should handle multiple clusters', () => {
+      const clusters: ClusterSummary[] = [
+        {
+          clusterId: 'cluster-1',
+          candidateNames: ['React'],
+          representativeTitles: ['Note 1'],
+          commonTags: [],
+          folderPath: '',
+          noteCount: 10,
+        },
+        {
+          clusterId: 'cluster-2',
+          candidateNames: ['Python'],
+          representativeTitles: ['Note 2'],
+          commonTags: [],
+          folderPath: '',
+          noteCount: 20,
+        },
+      ];
 
-			const prompt = buildConceptNamingPrompt(clusters);
+      const prompt = buildConceptNamingPrompt(clusters);
 
-			expect(prompt).toContain('2 note clusters');
-			expect(prompt).toContain('Cluster 1');
-			expect(prompt).toContain('Cluster 2');
-		});
+      expect(prompt).toContain('2 note clusters');
+      expect(prompt).toContain('Cluster 1');
+      expect(prompt).toContain('Cluster 2');
+    });
 
-		it('should handle empty values', () => {
-			const clusters: ClusterSummary[] = [
-				{
-					clusterId: 'cluster-1',
-					candidateNames: [],
-					representativeTitles: [],
-					commonTags: [],
-					folderPath: '',
-					noteCount: 0,
-				},
-			];
+    it('should handle empty values', () => {
+      const clusters: ClusterSummary[] = [
+        {
+          clusterId: 'cluster-1',
+          candidateNames: [],
+          representativeTitles: [],
+          commonTags: [],
+          folderPath: '',
+          noteCount: 0,
+        },
+      ];
 
-			const prompt = buildConceptNamingPrompt(clusters);
+      const prompt = buildConceptNamingPrompt(clusters);
 
-			expect(prompt).toContain('Candidate names: None');
-			expect(prompt).toContain('Common tags: None');
-			expect(prompt).toContain('Folder: Root');
-		});
+      expect(prompt).toContain('Candidate names: None');
+      expect(prompt).toContain('Common tags: None');
+      expect(prompt).toContain('Folder: Root');
+    });
 
-		it('should include misfitNotes in expected format', () => {
-			const clusters: ClusterSummary[] = [
-				{
-					clusterId: 'cluster-1',
-					candidateNames: ['Test'],
-					representativeTitles: [],
-					commonTags: [],
-					folderPath: '',
-					noteCount: 5,
-				},
-			];
+    it('should include misfitNotes in expected format', () => {
+      const clusters: ClusterSummary[] = [
+        {
+          clusterId: 'cluster-1',
+          candidateNames: ['Test'],
+          representativeTitles: [],
+          commonTags: [],
+          folderPath: '',
+          noteCount: 5,
+        },
+      ];
 
-			const prompt = buildConceptNamingPrompt(clusters);
+      const prompt = buildConceptNamingPrompt(clusters);
 
-			expect(prompt).toContain('misfitNotes');
-			expect(prompt).toContain('noteId');
-			expect(prompt).toContain('reason');
-		});
-	});
+      expect(prompt).toContain('misfitNotes');
+      expect(prompt).toContain('noteId');
+      expect(prompt).toContain('reason');
+    });
+  });
 
-	describe('parseNamingResponse', () => {
-		it('should parse valid JSON array with misfitNotes', () => {
-			const response = `[
+  describe('parseNamingResponse', () => {
+    it('should parse valid JSON array with misfitNotes', () => {
+      const response = `[
 				{
 					"clusterId": "cluster-1",
 					"canonicalName": "React Development",
@@ -123,19 +123,19 @@ describe('prompts', () => {
 				}
 			]`;
 
-			const results = parseNamingResponse(response);
+      const results = parseNamingResponse(response);
 
-			expect(results).toHaveLength(1);
-			expect(results[0].clusterId).toBe('cluster-1');
-			expect(results[0].canonicalName).toBe('React Development');
-			expect(results[0].quizzabilityScore).toBe(0.9);
-			expect(results[0].misfitNotes).toHaveLength(1);
-			expect(results[0].misfitNotes[0].noteId).toBe('grocery-list.md');
-			expect(results[0].misfitNotes[0].reason).toBe('Not programming content');
-		});
+      expect(results).toHaveLength(1);
+      expect(results[0].clusterId).toBe('cluster-1');
+      expect(results[0].canonicalName).toBe('React Development');
+      expect(results[0].quizzabilityScore).toBe(0.9);
+      expect(results[0].misfitNotes).toHaveLength(1);
+      expect(results[0].misfitNotes[0].noteId).toBe('grocery-list.md');
+      expect(results[0].misfitNotes[0].reason).toBe('Not programming content');
+    });
 
-		it('should parse JSON from markdown code block', () => {
-			const response = `Here are the results:
+    it('should parse JSON from markdown code block', () => {
+      const response = `Here are the results:
 
 \`\`\`json
 [
@@ -151,15 +151,15 @@ describe('prompts', () => {
 
 That's all!`;
 
-			const results = parseNamingResponse(response);
+      const results = parseNamingResponse(response);
 
-			expect(results).toHaveLength(1);
-			expect(results[0].canonicalName).toBe('Test');
-			expect(results[0].misfitNotes).toEqual([]);
-		});
+      expect(results).toHaveLength(1);
+      expect(results[0].canonicalName).toBe('Test');
+      expect(results[0].misfitNotes).toEqual([]);
+    });
 
-		it('should normalize score out of range', () => {
-			const response = `[
+    it('should normalize score out of range', () => {
+      const response = `[
 				{
 					"clusterId": "cluster-1",
 					"canonicalName": "Test",
@@ -169,13 +169,13 @@ That's all!`;
 				}
 			]`;
 
-			const results = parseNamingResponse(response);
+      const results = parseNamingResponse(response);
 
-			expect(results[0].quizzabilityScore).toBe(1);
-		});
+      expect(results[0].quizzabilityScore).toBe(1);
+    });
 
-		it('should handle non-quizzable with reason', () => {
-			const response = `[
+    it('should handle non-quizzable with reason', () => {
+      const response = `[
 				{
 					"clusterId": "cluster-1",
 					"canonicalName": "Meeting Notes",
@@ -186,14 +186,14 @@ That's all!`;
 				}
 			]`;
 
-			const results = parseNamingResponse(response);
+      const results = parseNamingResponse(response);
 
-			expect(results[0].quizzabilityScore).toBe(0.1);
-			expect(results[0].nonQuizzableReason).toBe('Ephemeral content');
-		});
+      expect(results[0].quizzabilityScore).toBe(0.1);
+      expect(results[0].nonQuizzableReason).toBe('Ephemeral content');
+    });
 
-		it('should handle suggested merges', () => {
-			const response = `[
+    it('should handle suggested merges', () => {
+      const response = `[
 				{
 					"clusterId": "cluster-1",
 					"canonicalName": "JavaScript",
@@ -203,13 +203,13 @@ That's all!`;
 				}
 			]`;
 
-			const results = parseNamingResponse(response);
+      const results = parseNamingResponse(response);
 
-			expect(results[0].suggestedMerges).toEqual(['cluster-2', 'cluster-3']);
-		});
+      expect(results[0].suggestedMerges).toEqual(['cluster-2', 'cluster-3']);
+    });
 
-		it('should handle missing misfitNotes gracefully', () => {
-			const response = `[
+    it('should handle missing misfitNotes gracefully', () => {
+      const response = `[
 				{
 					"clusterId": "cluster-1",
 					"canonicalName": "Test",
@@ -218,13 +218,13 @@ That's all!`;
 				}
 			]`;
 
-			const results = parseNamingResponse(response);
+      const results = parseNamingResponse(response);
 
-			expect(results[0].misfitNotes).toEqual([]);
-		});
+      expect(results[0].misfitNotes).toEqual([]);
+    });
 
-		it('should handle malformed misfitNotes gracefully', () => {
-			const response = `[
+    it('should handle malformed misfitNotes gracefully', () => {
+      const response = `[
 				{
 					"clusterId": "cluster-1",
 					"canonicalName": "Test",
@@ -237,23 +237,23 @@ That's all!`;
 				}
 			]`;
 
-			const results = parseNamingResponse(response);
+      const results = parseNamingResponse(response);
 
-			// Should only include valid entries
-			expect(results[0].misfitNotes).toHaveLength(1);
-			expect(results[0].misfitNotes[0].noteId).toBe('valid.md');
-		});
+      // Should only include valid entries
+      expect(results[0].misfitNotes).toHaveLength(1);
+      expect(results[0].misfitNotes[0].noteId).toBe('valid.md');
+    });
 
-		it('should throw on invalid JSON', () => {
-			expect(() => parseNamingResponse('not json')).toThrow();
-		});
+    it('should throw on invalid JSON', () => {
+      expect(() => parseNamingResponse('not json')).toThrow();
+    });
 
-		it('should throw on non-array', () => {
-			expect(() => parseNamingResponse('{"foo": "bar"}')).toThrow('Expected array');
-		});
+    it('should throw on non-array', () => {
+      expect(() => parseNamingResponse('{"foo": "bar"}')).toThrow('Expected array');
+    });
 
-		it('should throw on missing required fields', () => {
-			expect(() => parseNamingResponse('[{"foo": "bar"}]')).toThrow('clusterId');
-		});
-	});
+    it('should throw on missing required fields', () => {
+      expect(() => parseNamingResponse('[{"foo": "bar"}]')).toThrow('clusterId');
+    });
+  });
 });

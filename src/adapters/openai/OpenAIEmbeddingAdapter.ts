@@ -1,11 +1,11 @@
 import { filterEmptyTexts } from '@/domain/embedding/filterEmptyTexts';
 import { estimateTokens } from '@/domain/embedding/tokenUtils';
 import type {
-	BatchEmbeddingResult,
-	EmbeddingConfig,
-	EmbeddingInput,
-	EmbeddingResult,
-	IEmbeddingProvider,
+  BatchEmbeddingResult,
+  EmbeddingConfig,
+  EmbeddingInput,
+  EmbeddingResult,
+  IEmbeddingProvider,
 } from '@/ports/IEmbeddingProvider';
 import OpenAI from 'openai';
 
@@ -13,29 +13,29 @@ import OpenAI from 'openai';
  * Default configuration for OpenAI embedding adapter
  */
 export const DEFAULT_OPENAI_EMBEDDING_CONFIG: EmbeddingConfig = {
-	model: 'text-embedding-3-small',
-	maxTokensPerText: 8191,
-	batchSize: 100,
-	maxRetries: 3,
-	retryBaseDelay: 1000,
+  model: 'text-embedding-3-small',
+  maxTokensPerText: 8191,
+  batchSize: 100,
+  maxRetries: 3,
+  retryBaseDelay: 1000,
 };
 
 /**
  * Cost per million tokens for OpenAI embedding models
  */
 const MODEL_COSTS: Record<string, number> = {
-	'text-embedding-3-small': 0.02,
-	'text-embedding-3-large': 0.13,
-	'text-embedding-ada-002': 0.1,
+  'text-embedding-3-small': 0.02,
+  'text-embedding-3-large': 0.13,
+  'text-embedding-ada-002': 0.1,
 };
 
 /**
  * Dimensions for OpenAI embedding models
  */
 const MODEL_DIMENSIONS: Record<string, number> = {
-	'text-embedding-3-small': 1536,
-	'text-embedding-3-large': 3072,
-	'text-embedding-ada-002': 1536,
+  'text-embedding-3-small': 1536,
+  'text-embedding-3-large': 3072,
+  'text-embedding-ada-002': 1536,
 };
 
 /**
@@ -47,188 +47,188 @@ const NON_RETRYABLE_STATUS_CODES = [400, 401, 403, 404];
  * OpenAI embedding provider implementation
  */
 export class OpenAIEmbeddingAdapter implements IEmbeddingProvider {
-	private client: OpenAI;
-	private config: EmbeddingConfig;
+  private client: OpenAI;
+  private config: EmbeddingConfig;
 
-	constructor(config: Partial<EmbeddingConfig> & { apiKey: string }) {
-		this.config = { ...DEFAULT_OPENAI_EMBEDDING_CONFIG, ...config };
-		this.client = new OpenAI({ apiKey: config.apiKey });
-	}
+  constructor(config: Partial<EmbeddingConfig> & { apiKey: string }) {
+    this.config = { ...DEFAULT_OPENAI_EMBEDDING_CONFIG, ...config };
+    this.client = new OpenAI({ apiKey: config.apiKey });
+  }
 
-	async embed(notePath: string, text: string): Promise<EmbeddingResult> {
-		const result = await this.embedBatch([{ notePath, text }]);
-		return result.embeddings[0];
-	}
+  async embed(notePath: string, text: string): Promise<EmbeddingResult> {
+    const result = await this.embedBatch([{ notePath, text }]);
+    return result.embeddings[0];
+  }
 
-	async embedBatch(texts: EmbeddingInput[]): Promise<BatchEmbeddingResult> {
-		if (texts.length === 0) {
-			return {
-				embeddings: [],
-				totalTokens: 0,
-				usage: { totalTokens: 0, estimatedCost: 0, apiCalls: 0 },
-			};
-		}
+  async embedBatch(texts: EmbeddingInput[]): Promise<BatchEmbeddingResult> {
+    if (texts.length === 0) {
+      return {
+        embeddings: [],
+        totalTokens: 0,
+        usage: { totalTokens: 0, estimatedCost: 0, apiCalls: 0 },
+      };
+    }
 
-		// Filter out empty texts - OpenAI API rejects empty strings and they
-		// produce meaningless embeddings anyway
-		const { nonEmptyTexts } = filterEmptyTexts(texts);
+    // Filter out empty texts - OpenAI API rejects empty strings and they
+    // produce meaningless embeddings anyway
+    const { nonEmptyTexts } = filterEmptyTexts(texts);
 
-		// If all texts are empty, return early with no embeddings
-		if (nonEmptyTexts.length === 0) {
-			return {
-				embeddings: [],
-				totalTokens: 0,
-				usage: { totalTokens: 0, estimatedCost: 0, apiCalls: 0 },
-			};
-		}
+    // If all texts are empty, return early with no embeddings
+    if (nonEmptyTexts.length === 0) {
+      return {
+        embeddings: [],
+        totalTokens: 0,
+        usage: { totalTokens: 0, estimatedCost: 0, apiCalls: 0 },
+      };
+    }
 
-		const results: EmbeddingResult[] = [];
-		let totalTokens = 0;
-		let apiCalls = 0;
+    const results: EmbeddingResult[] = [];
+    let totalTokens = 0;
+    let apiCalls = 0;
 
-		// Process non-empty texts in batches
-		for (let i = 0; i < nonEmptyTexts.length; i += this.config.batchSize) {
-			const batch = nonEmptyTexts.slice(i, i + this.config.batchSize);
-			const batchResult = await this.embedBatchWithRetry(batch);
+    // Process non-empty texts in batches
+    for (let i = 0; i < nonEmptyTexts.length; i += this.config.batchSize) {
+      const batch = nonEmptyTexts.slice(i, i + this.config.batchSize);
+      const batchResult = await this.embedBatchWithRetry(batch);
 
-			results.push(...batchResult.embeddings);
-			totalTokens += batchResult.totalTokens;
-			apiCalls++;
-		}
+      results.push(...batchResult.embeddings);
+      totalTokens += batchResult.totalTokens;
+      apiCalls++;
+    }
 
-		return {
-			embeddings: results,
-			totalTokens,
-			usage: {
-				totalTokens,
-				estimatedCost: this.estimateCost(totalTokens),
-				apiCalls,
-			},
-		};
-	}
+    return {
+      embeddings: results,
+      totalTokens,
+      usage: {
+        totalTokens,
+        estimatedCost: this.estimateCost(totalTokens),
+        apiCalls,
+      },
+    };
+  }
 
-	getDimensions(): number {
-		return MODEL_DIMENSIONS[this.config.model] ?? 1536;
-	}
+  getDimensions(): number {
+    return MODEL_DIMENSIONS[this.config.model] ?? 1536;
+  }
 
-	getProviderName(): string {
-		return 'openai';
-	}
+  getProviderName(): string {
+    return 'openai';
+  }
 
-	getModelName(): string {
-		return this.config.model;
-	}
+  getModelName(): string {
+    return this.config.model;
+  }
 
-	/**
-	 * Estimate tokens using a simple approximation
-	 * OpenAI's cl100k_base tokenizer averages ~4 chars per token for English
-	 */
-	estimateTokens(text: string): number {
-		return estimateTokens(text);
-	}
+  /**
+   * Estimate tokens using a simple approximation
+   * OpenAI's cl100k_base tokenizer averages ~4 chars per token for English
+   */
+  estimateTokens(text: string): number {
+    return estimateTokens(text);
+  }
 
-	getConfig(): EmbeddingConfig {
-		return { ...this.config };
-	}
+  getConfig(): EmbeddingConfig {
+    return { ...this.config };
+  }
 
-	updateConfig(config: Partial<EmbeddingConfig>): void {
-		this.config = { ...this.config, ...config };
+  updateConfig(config: Partial<EmbeddingConfig>): void {
+    this.config = { ...this.config, ...config };
 
-		// Update client if API key changed
-		if (config.apiKey) {
-			this.client = new OpenAI({ apiKey: config.apiKey });
-		}
-	}
+    // Update client if API key changed
+    if (config.apiKey) {
+      this.client = new OpenAI({ apiKey: config.apiKey });
+    }
+  }
 
-	// ============ Private Methods ============
+  // ============ Private Methods ============
 
-	private async embedBatchWithRetry(
-		inputs: EmbeddingInput[],
-	): Promise<{ embeddings: EmbeddingResult[]; totalTokens: number }> {
-		let lastError: Error | null = null;
+  private async embedBatchWithRetry(
+    inputs: EmbeddingInput[],
+  ): Promise<{ embeddings: EmbeddingResult[]; totalTokens: number }> {
+    let lastError: Error | null = null;
 
-		for (let attempt = 0; attempt < this.config.maxRetries; attempt++) {
-			try {
-				return await this.callEmbeddingAPI(inputs);
-			} catch (error) {
-				lastError = error as Error;
+    for (let attempt = 0; attempt < this.config.maxRetries; attempt++) {
+      try {
+        return await this.callEmbeddingAPI(inputs);
+      } catch (error) {
+        lastError = error as Error;
 
-				// Check if error is retryable
-				if (!this.isRetryableError(error)) {
-					throw error;
-				}
+        // Check if error is retryable
+        if (!this.isRetryableError(error)) {
+          throw error;
+        }
 
-				// Wait before retry with exponential backoff
-				if (attempt < this.config.maxRetries - 1) {
-					const delay = this.config.retryBaseDelay * 2 ** attempt;
-					await this.sleep(delay);
-				}
-			}
-		}
+        // Wait before retry with exponential backoff
+        if (attempt < this.config.maxRetries - 1) {
+          const delay = this.config.retryBaseDelay * 2 ** attempt;
+          await this.sleep(delay);
+        }
+      }
+    }
 
-		throw lastError ?? new Error('Embedding failed after retries');
-	}
+    throw lastError ?? new Error('Embedding failed after retries');
+  }
 
-	private async callEmbeddingAPI(
-		inputs: EmbeddingInput[],
-	): Promise<{ embeddings: EmbeddingResult[]; totalTokens: number }> {
-		const response = await this.client.embeddings.create({
-			model: this.config.model,
-			input: inputs.map((i) => i.text),
-		});
+  private async callEmbeddingAPI(
+    inputs: EmbeddingInput[],
+  ): Promise<{ embeddings: EmbeddingResult[]; totalTokens: number }> {
+    const response = await this.client.embeddings.create({
+      model: this.config.model,
+      input: inputs.map((i) => i.text),
+    });
 
-		const embeddings: EmbeddingResult[] = response.data.map((item, index) => ({
-			notePath: inputs[index].notePath,
-			embedding: item.embedding,
-			tokenCount: this.estimateTokens(inputs[index].text),
-		}));
+    const embeddings: EmbeddingResult[] = response.data.map((item, index) => ({
+      notePath: inputs[index].notePath,
+      embedding: item.embedding,
+      tokenCount: this.estimateTokens(inputs[index].text),
+    }));
 
-		return {
-			embeddings,
-			totalTokens:
-				response.usage?.total_tokens ?? embeddings.reduce((sum, e) => sum + e.tokenCount, 0),
-		};
-	}
+    return {
+      embeddings,
+      totalTokens:
+        response.usage?.total_tokens ?? embeddings.reduce((sum, e) => sum + e.tokenCount, 0),
+    };
+  }
 
-	private isRetryableError(error: unknown): boolean {
-		// Check for OpenAI API errors by duck typing (works with mocks)
-		if (this.isAPIError(error)) {
-			// Rate limit (429) and server errors (5xx) are retryable
-			if (error.status === 429) return true;
-			if (error.status >= 500) return true;
+  private isRetryableError(error: unknown): boolean {
+    // Check for OpenAI API errors by duck typing (works with mocks)
+    if (this.isAPIError(error)) {
+      // Rate limit (429) and server errors (5xx) are retryable
+      if (error.status === 429) return true;
+      if (error.status >= 500) return true;
 
-			// Client errors (4xx except 429) are not retryable
-			if (NON_RETRYABLE_STATUS_CODES.includes(error.status)) {
-				return false;
-			}
-		}
+      // Client errors (4xx except 429) are not retryable
+      if (NON_RETRYABLE_STATUS_CODES.includes(error.status)) {
+        return false;
+      }
+    }
 
-		// Network errors are retryable
-		if (error instanceof Error && error.message.includes('network')) {
-			return true;
-		}
+    // Network errors are retryable
+    if (error instanceof Error && error.message.includes('network')) {
+      return true;
+    }
 
-		return false;
-	}
+    return false;
+  }
 
-	/**
-	 * Check if error is an API error with status code (duck typing)
-	 */
-	private isAPIError(error: unknown): error is { status: number; message: string } {
-		return (
-			typeof error === 'object' &&
-			error !== null &&
-			'status' in error &&
-			typeof (error as { status: unknown }).status === 'number'
-		);
-	}
+  /**
+   * Check if error is an API error with status code (duck typing)
+   */
+  private isAPIError(error: unknown): error is { status: number; message: string } {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'status' in error &&
+      typeof (error as { status: unknown }).status === 'number'
+    );
+  }
 
-	private estimateCost(tokens: number): number {
-		const costPerMillion = MODEL_COSTS[this.config.model] ?? 0.02;
-		return (tokens / 1_000_000) * costPerMillion;
-	}
+  private estimateCost(tokens: number): number {
+    const costPerMillion = MODEL_COSTS[this.config.model] ?? 0.02;
+    return (tokens / 1_000_000) * costPerMillion;
+  }
 
-	private sleep(ms: number): Promise<void> {
-		return new Promise((resolve) => setTimeout(resolve, ms));
-	}
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 }

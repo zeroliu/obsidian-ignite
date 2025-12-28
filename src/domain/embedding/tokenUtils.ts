@@ -23,17 +23,17 @@ const CJK_PATTERN = /[\u4e00-\u9fff\u3400-\u4dbf\uac00-\ud7af\u3040-\u309f\u30a0
  * @returns Estimated token count (conservative upper bound)
  */
 export function estimateTokens(text: string): number {
-	if (!text) return 0;
+  if (!text) return 0;
 
-	// Count CJK characters
-	const cjkMatches = text.match(CJK_PATTERN);
-	const cjkCount = cjkMatches?.length ?? 0;
+  // Count CJK characters
+  const cjkMatches = text.match(CJK_PATTERN);
+  const cjkCount = cjkMatches?.length ?? 0;
 
-	// Non-CJK text: ~1.5 chars per token (very conservative to ensure we never exceed limits)
-	// CJK text: ~1 char per token (conservative - each CJK char can be 1+ tokens)
-	const nonCjkLength = text.length - cjkCount;
-	const nonCjkTokens = Math.ceil(nonCjkLength / 1.5);
-	const cjkTokens = cjkCount; // 1:1 ratio for safety
+  // Non-CJK text: ~1.5 chars per token (very conservative to ensure we never exceed limits)
+  // CJK text: ~1 char per token (conservative - each CJK char can be 1+ tokens)
+  const nonCjkLength = text.length - cjkCount;
+  const nonCjkTokens = Math.ceil(nonCjkLength / 1.5);
+  const cjkTokens = cjkCount; // 1:1 ratio for safety
 
-	return nonCjkTokens + cjkTokens;
+  return nonCjkTokens + cjkTokens;
 }

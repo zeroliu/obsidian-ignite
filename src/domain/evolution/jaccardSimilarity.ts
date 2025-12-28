@@ -13,26 +13,26 @@
  * @returns Jaccard similarity score (0-1)
  */
 export function jaccard<T>(setA: Set<T>, setB: Set<T>): number {
-	if (setA.size === 0 && setB.size === 0) {
-		return 1; // Both empty sets are considered identical
-	}
+  if (setA.size === 0 && setB.size === 0) {
+    return 1; // Both empty sets are considered identical
+  }
 
-	if (setA.size === 0 || setB.size === 0) {
-		return 0; // One empty set means no overlap
-	}
+  if (setA.size === 0 || setB.size === 0) {
+    return 0; // One empty set means no overlap
+  }
 
-	// Calculate intersection size
-	let intersectionSize = 0;
-	for (const item of setA) {
-		if (setB.has(item)) {
-			intersectionSize++;
-		}
-	}
+  // Calculate intersection size
+  let intersectionSize = 0;
+  for (const item of setA) {
+    if (setB.has(item)) {
+      intersectionSize++;
+    }
+  }
 
-	// Calculate union size: |A| + |B| - |A ∩ B|
-	const unionSize = setA.size + setB.size - intersectionSize;
+  // Calculate union size: |A| + |B| - |A ∩ B|
+  const unionSize = setA.size + setB.size - intersectionSize;
 
-	return intersectionSize / unionSize;
+  return intersectionSize / unionSize;
 }
 
 /**
@@ -44,7 +44,7 @@ export function jaccard<T>(setA: Set<T>, setB: Set<T>): number {
  * @returns Jaccard similarity score (0-1)
  */
 export function jaccardArrays<T>(arrayA: T[], arrayB: T[]): number {
-	return jaccard(new Set(arrayA), new Set(arrayB));
+  return jaccard(new Set(arrayA), new Set(arrayB));
 }
 
 /**
@@ -55,21 +55,21 @@ export function jaccardArrays<T>(arrayA: T[], arrayB: T[]): number {
  * @returns Best match with ID and score, or null if no candidates
  */
 export function findBestMatch<T>(
-	target: Set<T>,
-	candidates: Array<{ id: string; set: Set<T> }>,
+  target: Set<T>,
+  candidates: Array<{ id: string; set: Set<T> }>,
 ): { id: string; score: number } | null {
-	if (candidates.length === 0) {
-		return null;
-	}
+  if (candidates.length === 0) {
+    return null;
+  }
 
-	let bestMatch: { id: string; score: number } | null = null;
+  let bestMatch: { id: string; score: number } | null = null;
 
-	for (const candidate of candidates) {
-		const score = jaccard(target, candidate.set);
-		if (bestMatch === null || score > bestMatch.score) {
-			bestMatch = { id: candidate.id, score };
-		}
-	}
+  for (const candidate of candidates) {
+    const score = jaccard(target, candidate.set);
+    if (bestMatch === null || score > bestMatch.score) {
+      bestMatch = { id: candidate.id, score };
+    }
+  }
 
-	return bestMatch;
+  return bestMatch;
 }

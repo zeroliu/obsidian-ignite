@@ -12,28 +12,28 @@ import { QUIZZABILITY_THRESHOLD } from '@/domain/evolution/types';
  * Minimal cluster info sent to LLM to save tokens
  */
 export interface ClusterSummary {
-	/** Unique cluster identifier */
-	clusterId: string;
-	/** Candidate concept names derived from cluster analysis */
-	candidateNames: string[];
-	/** Top note titles (max 5) representing the cluster */
-	representativeTitles: string[];
-	/** Most common tags in the cluster */
-	commonTags: string[];
-	/** Common folder path for notes */
-	folderPath: string;
-	/** Number of notes in the cluster */
-	noteCount: number;
+  /** Unique cluster identifier */
+  clusterId: string;
+  /** Candidate concept names derived from cluster analysis */
+  candidateNames: string[];
+  /** Top note titles (max 5) representing the cluster */
+  representativeTitles: string[];
+  /** Most common tags in the cluster */
+  commonTags: string[];
+  /** Common folder path for notes */
+  folderPath: string;
+  /** Number of notes in the cluster */
+  noteCount: number;
 }
 
 /**
  * A note that doesn't fit its cluster (detected during naming)
  */
 export interface MisfitNote {
-	/** Note ID (file path) */
-	noteId: string;
-	/** Reason why this note doesn't fit */
-	reason: string;
+  /** Note ID (file path) */
+  noteId: string;
+  /** Reason why this note doesn't fit */
+  reason: string;
 }
 
 /**
@@ -41,18 +41,18 @@ export interface MisfitNote {
  * Includes misfit detection (merged Stage 3 + 3.5)
  */
 export interface ConceptNamingResult {
-	/** Cluster ID this result applies to */
-	clusterId: string;
-	/** LLM-assigned canonical concept name */
-	canonicalName: string;
-	/** Quizzability score (0-1) */
-	quizzabilityScore: number;
-	/** Reason if not quizzable (score < 0.4) */
-	nonQuizzableReason?: string;
-	/** Other cluster IDs that should merge with this one */
-	suggestedMerges: string[];
-	/** Notes that don't fit this cluster (misfit detection) */
-	misfitNotes: MisfitNote[];
+  /** Cluster ID this result applies to */
+  clusterId: string;
+  /** LLM-assigned canonical concept name */
+  canonicalName: string;
+  /** Quizzability score (0-1) */
+  quizzabilityScore: number;
+  /** Reason if not quizzable (score < 0.4) */
+  nonQuizzableReason?: string;
+  /** Other cluster IDs that should merge with this one */
+  suggestedMerges: string[];
+  /** Notes that don't fit this cluster (misfit detection) */
+  misfitNotes: MisfitNote[];
 }
 
 /**
@@ -62,83 +62,83 @@ export interface ConceptNamingResult {
  * Quizzability is derived from quizzabilityScore >= QUIZZABILITY_THRESHOLD (0.4).
  */
 export interface TrackedConcept {
-	/** Unique concept identifier */
-	id: string;
-	/** Canonical concept name */
-	canonicalName: string;
-	/** Note IDs (file paths) belonging to this concept */
-	noteIds: string[];
-	/** Quizzability score (0-1) */
-	quizzabilityScore: number;
-	/** Current cluster ID (singular, updated on evolution) */
-	clusterId: string;
-	/** Metadata for concept lifecycle */
-	metadata: {
-		createdAt: number;
-		lastUpdated: number;
-	};
-	/** History of evolution events for this concept */
-	evolutionHistory: EvolutionEvent[];
+  /** Unique concept identifier */
+  id: string;
+  /** Canonical concept name */
+  canonicalName: string;
+  /** Note IDs (file paths) belonging to this concept */
+  noteIds: string[];
+  /** Quizzability score (0-1) */
+  quizzabilityScore: number;
+  /** Current cluster ID (singular, updated on evolution) */
+  clusterId: string;
+  /** Metadata for concept lifecycle */
+  metadata: {
+    createdAt: number;
+    lastUpdated: number;
+  };
+  /** History of evolution events for this concept */
+  evolutionHistory: EvolutionEvent[];
 }
 
 /**
  * Request for concept naming batch
  */
 export interface ConceptNamingRequest {
-	/** Cluster summaries to name */
-	clusters: ClusterSummary[];
+  /** Cluster summaries to name */
+  clusters: ClusterSummary[];
 }
 
 /**
  * Response from concept naming batch
  */
 export interface ConceptNamingResponse {
-	/** Naming results for each cluster */
-	results: ConceptNamingResult[];
-	/** Token usage statistics */
-	usage?: TokenUsage;
+  /** Naming results for each cluster */
+  results: ConceptNamingResult[];
+  /** Token usage statistics */
+  usage?: TokenUsage;
 }
 
 /**
  * Token usage statistics from LLM call
  */
 export interface TokenUsage {
-	/** Input tokens consumed */
-	inputTokens: number;
-	/** Output tokens generated */
-	outputTokens: number;
+  /** Input tokens consumed */
+  inputTokens: number;
+  /** Output tokens generated */
+  outputTokens: number;
 }
 
 /**
  * Configuration for LLM provider
  */
 export interface LLMConfig {
-	/** API key for the LLM service */
-	apiKey?: string;
-	/** Model to use */
-	model: string;
-	/** Maximum tokens in response */
-	maxTokens: number;
-	/** Temperature for generation (0-1) */
-	temperature: number;
-	/** Number of clusters per batch */
-	batchSize: number;
-	/** Maximum retries on failure */
-	maxRetries: number;
-	/** Base delay for exponential backoff (ms) */
-	retryBaseDelay: number;
+  /** API key for the LLM service */
+  apiKey?: string;
+  /** Model to use */
+  model: string;
+  /** Maximum tokens in response */
+  maxTokens: number;
+  /** Temperature for generation (0-1) */
+  temperature: number;
+  /** Number of clusters per batch */
+  batchSize: number;
+  /** Maximum retries on failure */
+  maxRetries: number;
+  /** Base delay for exponential backoff (ms) */
+  retryBaseDelay: number;
 }
 
 /**
  * Default LLM configuration
  */
 export const DEFAULT_LLM_CONFIG: LLMConfig = {
-	model: 'claude-haiku-4-5-20251001',
-	maxTokens: 4096,
-	temperature: 0.3,
-	batchSize: 20,
-	maxRetries: 3,
-	retryBaseDelay: 1000,
+  model: 'claude-haiku-4-5-20251001',
+  maxTokens: 4096,
+  temperature: 0.3,
+  batchSize: 20,
+  maxRetries: 3,
+  retryBaseDelay: 1000,
 };
 
 /**
@@ -148,7 +148,7 @@ export const DEFAULT_LLM_CONFIG: LLMConfig = {
  * @returns true if quizzability score >= threshold
  */
 export function isQuizzable(concept: TrackedConcept): boolean {
-	return concept.quizzabilityScore >= QUIZZABILITY_THRESHOLD;
+  return concept.quizzabilityScore >= QUIZZABILITY_THRESHOLD;
 }
 
 /**
@@ -158,39 +158,39 @@ export function isQuizzable(concept: TrackedConcept): boolean {
  * @returns true if score >= threshold
  */
 export function isQuizzableScore(score: number): boolean {
-	return score >= QUIZZABILITY_THRESHOLD;
+  return score >= QUIZZABILITY_THRESHOLD;
 }
 
 /**
  * Helper to create a TrackedConcept with defaults
  */
 export function createTrackedConcept(
-	partial: Partial<TrackedConcept> & {
-		canonicalName: string;
-		noteIds: string[];
-		clusterId: string;
-	},
+  partial: Partial<TrackedConcept> & {
+    canonicalName: string;
+    noteIds: string[];
+    clusterId: string;
+  },
 ): TrackedConcept {
-	const now = Date.now();
-	return {
-		id: partial.id ?? `concept-${now}-${Math.random().toString(36).slice(2, 8)}`,
-		canonicalName: partial.canonicalName,
-		noteIds: partial.noteIds,
-		quizzabilityScore: partial.quizzabilityScore ?? 0.5,
-		clusterId: partial.clusterId,
-		metadata: partial.metadata ?? {
-			createdAt: now,
-			lastUpdated: now,
-		},
-		evolutionHistory: partial.evolutionHistory ?? [],
-	};
+  const now = Date.now();
+  return {
+    id: partial.id ?? `concept-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    canonicalName: partial.canonicalName,
+    noteIds: partial.noteIds,
+    quizzabilityScore: partial.quizzabilityScore ?? 0.5,
+    clusterId: partial.clusterId,
+    metadata: partial.metadata ?? {
+      createdAt: now,
+      lastUpdated: now,
+    },
+    evolutionHistory: partial.evolutionHistory ?? [],
+  };
 }
 
 /**
  * Generate a unique concept ID
  */
 export function generateConceptId(): string {
-	return `concept-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `concept-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // ============ Legacy Types (Deprecated) ============
@@ -201,30 +201,30 @@ export function generateConceptId(): string {
  * @deprecated Use TrackedConcept instead
  */
 export interface Concept {
-	id: string;
-	name: string;
-	noteIds: string[];
-	quizzabilityScore: number;
-	isQuizzable: boolean;
-	originalClusterIds: string[];
-	createdAt: number;
+  id: string;
+  name: string;
+  noteIds: string[];
+  quizzabilityScore: number;
+  isQuizzable: boolean;
+  originalClusterIds: string[];
+  createdAt: number;
 }
 
 /**
  * @deprecated Use createTrackedConcept instead
  */
 export function createConcept(
-	partial: Partial<Concept> & { name: string; noteIds: string[] },
+  partial: Partial<Concept> & { name: string; noteIds: string[] },
 ): Concept {
-	return {
-		id: partial.id ?? `concept-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-		name: partial.name,
-		noteIds: partial.noteIds,
-		quizzabilityScore: partial.quizzabilityScore ?? 0.5,
-		isQuizzable: partial.isQuizzable ?? true,
-		originalClusterIds: partial.originalClusterIds ?? [],
-		createdAt: partial.createdAt ?? Date.now(),
-	};
+  return {
+    id: partial.id ?? `concept-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: partial.name,
+    noteIds: partial.noteIds,
+    quizzabilityScore: partial.quizzabilityScore ?? 0.5,
+    isQuizzable: partial.isQuizzable ?? true,
+    originalClusterIds: partial.originalClusterIds ?? [],
+    createdAt: partial.createdAt ?? Date.now(),
+  };
 }
 
 /**
@@ -233,15 +233,15 @@ export function createConcept(
  * @deprecated Use TrackedConcept directly
  */
 export function toLegacyConcept(tracked: TrackedConcept): Concept {
-	return {
-		id: tracked.id,
-		name: tracked.canonicalName,
-		noteIds: tracked.noteIds,
-		quizzabilityScore: tracked.quizzabilityScore,
-		isQuizzable: isQuizzable(tracked),
-		originalClusterIds: [tracked.clusterId],
-		createdAt: tracked.metadata.createdAt,
-	};
+  return {
+    id: tracked.id,
+    name: tracked.canonicalName,
+    noteIds: tracked.noteIds,
+    quizzabilityScore: tracked.quizzabilityScore,
+    isQuizzable: isQuizzable(tracked),
+    originalClusterIds: [tracked.clusterId],
+    createdAt: tracked.metadata.createdAt,
+  };
 }
 
 /**
@@ -250,18 +250,18 @@ export function toLegacyConcept(tracked: TrackedConcept): Concept {
  * @deprecated Use TrackedConcept directly
  */
 export function fromLegacyConcept(legacy: Concept): TrackedConcept {
-	return {
-		id: legacy.id,
-		canonicalName: legacy.name,
-		noteIds: legacy.noteIds,
-		quizzabilityScore: legacy.quizzabilityScore,
-		clusterId: legacy.originalClusterIds[0] ?? '',
-		metadata: {
-			createdAt: legacy.createdAt,
-			lastUpdated: legacy.createdAt,
-		},
-		evolutionHistory: [],
-	};
+  return {
+    id: legacy.id,
+    canonicalName: legacy.name,
+    noteIds: legacy.noteIds,
+    quizzabilityScore: legacy.quizzabilityScore,
+    clusterId: legacy.originalClusterIds[0] ?? '',
+    metadata: {
+      createdAt: legacy.createdAt,
+      lastUpdated: legacy.createdAt,
+    },
+    evolutionHistory: [],
+  };
 }
 
 // ============ Removed Types ============

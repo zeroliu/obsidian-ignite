@@ -15,17 +15,17 @@ export { jaccard, jaccardArrays, findBestMatch } from './jaccardSimilarity';
 // Evolution Detection
 export type { EvolutionDetectionResult } from './detectEvolution';
 export {
-	detectEvolution,
-	classifyEvolution,
-	findEvolutionForCluster,
-	groupEvolutionsByType,
+  detectEvolution,
+  classifyEvolution,
+  findEvolutionForCluster,
+  groupEvolutionsByType,
 } from './detectEvolution';
 
 // Auto-Evolve Concept
 export type { AutoEvolveResult, EvolutionStats } from './autoEvolveConcept';
 export {
-	autoEvolveConcept,
-	autoEvolveConceptBatch,
-	filterSurvivingConcepts,
-	calculateEvolutionStats,
+  autoEvolveConcept,
+  autoEvolveConceptBatch,
+  filterSurvivingConcepts,
+  calculateEvolutionStats,
 } from './autoEvolveConcept';

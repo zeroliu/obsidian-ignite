@@ -41,11 +41,11 @@ Output JSON format only, no additional text.`;
  * @returns User prompt string
  */
 export function buildConceptNamingPrompt(clusters: ClusterSummary[]): string {
-	const clusterCount = clusters.length;
+  const clusterCount = clusters.length;
 
-	const clusterDescriptions = clusters
-		.map(
-			(c, i) => `
+  const clusterDescriptions = clusters
+    .map(
+      (c, i) => `
 ## Cluster ${i + 1}
 - ID: ${c.clusterId}
 - Candidate names: ${c.candidateNames.join(', ') || 'None'}
@@ -53,10 +53,10 @@ export function buildConceptNamingPrompt(clusters: ClusterSummary[]): string {
 - Common tags: ${c.commonTags.join(', ') || 'None'}
 - Folder: ${c.folderPath || 'Root'}
 - Note count: ${c.noteCount}`,
-		)
-		.join('\n');
+    )
+    .join('\n');
 
-	return `Analyze these ${clusterCount} note clusters and provide concept naming results.
+  return `Analyze these ${clusterCount} note clusters and provide concept naming results.
 ${clusterDescriptions}
 
 Return JSON array with this structure for each cluster:
@@ -92,53 +92,53 @@ Guidelines:
  * @throws Error if parsing fails
  */
 export function parseNamingResponse(response: string): ConceptNamingResult[] {
-	// Try to extract JSON from response
-	const json = extractJSON(response);
+  // Try to extract JSON from response
+  const json = extractJSON(response);
 
-	// Parse as array
-	const parsed = JSON.parse(json);
+  // Parse as array
+  const parsed = JSON.parse(json);
 
-	if (!Array.isArray(parsed)) {
-		throw new Error('Expected array of naming results');
-	}
+  if (!Array.isArray(parsed)) {
+    throw new Error('Expected array of naming results');
+  }
 
-	// Validate and normalize each result
-	return parsed.map((item: Record<string, unknown>) => {
-		if (typeof item.clusterId !== 'string') {
-			throw new Error('Missing or invalid clusterId');
-		}
-		if (typeof item.canonicalName !== 'string') {
-			throw new Error('Missing or invalid canonicalName');
-		}
+  // Validate and normalize each result
+  return parsed.map((item: Record<string, unknown>) => {
+    if (typeof item.clusterId !== 'string') {
+      throw new Error('Missing or invalid clusterId');
+    }
+    if (typeof item.canonicalName !== 'string') {
+      throw new Error('Missing or invalid canonicalName');
+    }
 
-		// Parse misfit notes
-		const misfitNotes: MisfitNote[] = [];
-		if (Array.isArray(item.misfitNotes)) {
-			for (const misfit of item.misfitNotes) {
-				if (typeof misfit === 'object' && misfit !== null) {
-					const m = misfit as Record<string, unknown>;
-					if (typeof m.noteId === 'string') {
-						misfitNotes.push({
-							noteId: m.noteId,
-							reason: typeof m.reason === 'string' ? m.reason : '',
-						});
-					}
-				}
-			}
-		}
+    // Parse misfit notes
+    const misfitNotes: MisfitNote[] = [];
+    if (Array.isArray(item.misfitNotes)) {
+      for (const misfit of item.misfitNotes) {
+        if (typeof misfit === 'object' && misfit !== null) {
+          const m = misfit as Record<string, unknown>;
+          if (typeof m.noteId === 'string') {
+            misfitNotes.push({
+              noteId: m.noteId,
+              reason: typeof m.reason === 'string' ? m.reason : '',
+            });
+          }
+        }
+      }
+    }
 
-		return {
-			clusterId: item.clusterId,
-			canonicalName: item.canonicalName,
-			quizzabilityScore: normalizeScore(item.quizzabilityScore),
-			nonQuizzableReason:
-				typeof item.nonQuizzableReason === 'string' ? item.nonQuizzableReason : undefined,
-			suggestedMerges: Array.isArray(item.suggestedMerges)
-				? item.suggestedMerges.filter((id): id is string => typeof id === 'string')
-				: [],
-			misfitNotes,
-		};
-	});
+    return {
+      clusterId: item.clusterId,
+      canonicalName: item.canonicalName,
+      quizzabilityScore: normalizeScore(item.quizzabilityScore),
+      nonQuizzableReason:
+        typeof item.nonQuizzableReason === 'string' ? item.nonQuizzableReason : undefined,
+      suggestedMerges: Array.isArray(item.suggestedMerges)
+        ? item.suggestedMerges.filter((id): id is string => typeof id === 'string')
+        : [],
+      misfitNotes,
+    };
+  });
 }
 
 /**
@@ -146,62 +146,62 @@ export function parseNamingResponse(response: string): ConceptNamingResult[] {
  * Handles markdown code blocks and extra text
  */
 function extractJSON(response: string): string {
-	// Remove markdown code blocks
-	let cleaned = response.trim();
+  // Remove markdown code blocks
+  let cleaned = response.trim();
 
-	// Try to extract from ```json ... ``` blocks
-	const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
-	if (jsonBlockMatch) {
-		cleaned = jsonBlockMatch[1].trim();
-	}
+  // Try to extract from ```json ... ``` blocks
+  const jsonBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonBlockMatch) {
+    cleaned = jsonBlockMatch[1].trim();
+  }
 
-	// Try to find array or object start
-	const arrayStart = cleaned.indexOf('[');
-	const objectStart = cleaned.indexOf('{');
+  // Try to find array or object start
+  const arrayStart = cleaned.indexOf('[');
+  const objectStart = cleaned.indexOf('{');
 
-	if (arrayStart === -1 && objectStart === -1) {
-		throw new Error('No JSON found in response');
-	}
+  if (arrayStart === -1 && objectStart === -1) {
+    throw new Error('No JSON found in response');
+  }
 
-	// Determine which comes first
-	let start: number;
+  // Determine which comes first
+  let start: number;
 
-	if (arrayStart === -1) {
-		start = objectStart;
-	} else if (objectStart === -1) {
-		start = arrayStart;
-	} else {
-		start = Math.min(arrayStart, objectStart);
-	}
+  if (arrayStart === -1) {
+    start = objectStart;
+  } else if (objectStart === -1) {
+    start = arrayStart;
+  } else {
+    start = Math.min(arrayStart, objectStart);
+  }
 
-	// Find matching end
-	let depth = 0;
-	let end = start;
+  // Find matching end
+  let depth = 0;
+  let end = start;
 
-	for (let i = start; i < cleaned.length; i++) {
-		const char = cleaned[i];
-		if (char === '[' || char === '{') {
-			depth++;
-		} else if (char === ']' || char === '}') {
-			depth--;
-			if (depth === 0) {
-				end = i + 1;
-				break;
-			}
-		}
-	}
+  for (let i = start; i < cleaned.length; i++) {
+    const char = cleaned[i];
+    if (char === '[' || char === '{') {
+      depth++;
+    } else if (char === ']' || char === '}') {
+      depth--;
+      if (depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
 
-	return cleaned.slice(start, end);
+  return cleaned.slice(start, end);
 }
 
 /**
  * Normalize a score to 0-1 range
  */
 function normalizeScore(value: unknown): number {
-	if (typeof value !== 'number') {
-		return 0.5;
-	}
-	return Math.max(0, Math.min(1, value));
+  if (typeof value !== 'number') {
+    return 0.5;
+  }
+  return Math.max(0, Math.min(1, value));
 }
 
 // ============ Removed Functions ============
