@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes an adversarial self-improvement loop where two AI subagents collaborate to iteratively optimize clustering hyperparameters. The loop continues until quality targets are met or the maximum number of iterations is reached.
+This document describes an agent-driven self-improvement loop for achieving **noise ratio 5-20%** in note clustering. The agent has full autonomy to explore creative solutions beyond hyperparameter tuning, including different algorithms, pre/post-processing, and LLM-based approaches.
 
 ## Architecture
 
@@ -30,63 +30,83 @@ This document describes an adversarial self-improvement loop where two AI subage
 ### Subagent 1: Evaluator
 
 **Responsibilities:**
-1. Run clustering with current configuration
+
+1. Run clustering and save output to iteration folder
 2. Execute evaluation script to compute all metrics
-3. Analyze individual metrics against targets
-4. Identify which specific metrics need improvement
-5. Create improvement plan document with parameter changes
+3. Analyze results and form hypothesis about why noise is high
+4. Propose an experiment to reduce noise ratio
+5. Create improvement plan with hypothesis, proposed approach, and expected outcomes
 
 **Commands:**
+
 ```bash
-# Run clustering with current config
-npx tsx scripts/run-clustering.ts --config outputs/improvement-loop/current-config.json
+# Run clustering with current config and save output to iteration folder
+npx tsx scripts/run-clustering.ts \
+  --config outputs/improvement-loop/current-config.json \
+  --output outputs/improvement-loop/iteration-N/clustering-output.json
 
 # Run evaluation
-npx tsx scripts/evaluate-clustering.ts --vault --config outputs/improvement-loop/current-config.json --output outputs/improvement-loop/iteration-N/evaluation.json
+npx tsx scripts/evaluate-clustering.ts \
+  --vault \
+  --config outputs/improvement-loop/current-config.json \
+  --output outputs/improvement-loop/iteration-N/evaluation.json
 ```
 
 **Output:**
 Create `outputs/improvement-loop/iteration-N/improvement-plan.md` with:
-- Table of each metric vs its target
-- Which specific metrics need improvement
-- Parameter changes to address the weakest metric
-- Rationale for each change
+
+- Hypothesis about why current approach isn't working
+- Analysis of what the metrics indicate
+- Proposed experiment to test
+- Expected outcomes and risks
 
 ### Subagent 2: Implementer
 
 **Responsibilities:**
+
 1. Read the improvement plan from Subagent 1
-2. Validate proposed changes are within parameter bounds
-3. Update the configuration file
-4. Re-run clustering pipeline with new configuration
-5. Save results for next evaluation
+2. Implement the proposed changes (may involve code changes, not just config)
+3. Run the experiment
+4. Save all results to the iteration folder
 
 **Commands:**
+
 ```bash
-# After updating config, run clustering
-npx tsx scripts/run-clustering.ts --config outputs/improvement-loop/current-config.json --output outputs/improvement-loop/iteration-N/clustering-output.json
+# Run clustering and save output to iteration folder
+npx tsx scripts/run-clustering.ts \
+  --config outputs/improvement-loop/current-config.json \
+  --output outputs/improvement-loop/iteration-N/clustering-output.json
 ```
 
 ---
 
 ## Target Metrics
 
-The loop aims to achieve ALL of the following:
+### Required (Non-negotiable)
 
-| Metric | Target | Status Thresholds |
-|--------|--------|-------------------|
-| Silhouette Score | >= 0.3 | good: >=0.3, needs_improvement: 0.1-0.3, poor: <0.1 |
-| Noise Ratio | 5-20% | good: 5-20%, needs_improvement: 2-30%, poor: <2% or >30% |
-| Tag Homogeneity | >= 50% | good: >=50%, needs_improvement: 30-50%, poor: <30% |
+| Metric      | Target |
+| ----------- | ------ |
+| Noise Ratio | 5-20%  |
+
+### Agent-Proposed
+
+After initial exploration, propose appropriate targets for:
+
+- Silhouette score (justify based on data characteristics)
+- Tag homogeneity (justify based on tag distribution)
+
+Grid search showed: best silhouette was 0.22, best tag homogeneity was 9%.
+These original targets (0.3, 50%) may be unrealistic for this dataset.
 
 ---
 
-## Parameter Bounds
+## Parameter Reference
 
-The Implementer must enforce these bounds when making changes:
+These are the parameters explored in grid search. The agent is NOT limited to these values:
 
 ```typescript
-const PARAMETER_BOUNDS = {
+// Grid search explored these values, but you can try others
+const GRID_SEARCH_VALUES = {
   umap: {
     nNeighbors: [5, 10, 15, 30, 50],
     minDist: [0.0, 0.05, 0.1, 0.2, 0.5],
@@ -97,6 +117,12 @@ const PARAMETER_BOUNDS = {
     minSamples: [1, 3, 5, 10],
   },
 };
+
+// You can also try completely different approaches:
+// - Different clustering algorithms (K-means, DBSCAN, spectral, etc.)
+// - Force-assign noise notes to nearest cluster
+// - Use LLM to assign difficult notes
+// - Two-pass clustering
 ```
 
 ---
@@ -108,115 +134,119 @@ When creating an improvement plan, use this format:
 ```markdown
 # Improvement Plan - Iteration N
 
-## Current Configuration
-```json
-{
-  "umap": { "nNeighbors": 15, "minDist": 0.1, "nComponents": 10 },
-  "hdbscan": { "minClusterSize": 5, "minSamples": 3 }
-}
-```
+## Current State
 
-## Metric Analysis
+- Noise ratio: X% (target: 5-20%)
+- Silhouette: X
+- Clusters: X
+- Approach used: [description]
 
-| Metric | Value | Target | Status | Gap |
-|--------|-------|--------|--------|-----|
-| Silhouette Score | 0.25 | >= 0.3 | needs_improvement | -0.05 |
-| Noise Ratio | 18% | 5-20% | good | - |
-| Tag Homogeneity | 45% | >= 50% | needs_improvement | -5% |
+## Hypothesis
 
-## Priority
+I believe noise is high because [explanation].
 
-Focus on: **Silhouette Score** (weakest metric relative to target)
+Evidence:
 
-## Analysis
+- [observation 1]
+- [observation 2]
 
-[Explain what the current metrics indicate about clustering quality]
+## Proposed Experiment
 
-- Silhouette score of 0.25 suggests notes are somewhat similar to their cluster but not well-separated from other clusters
-- The noise ratio is healthy at 18%
-- Tag homogeneity is close to target, suggesting semantic clusters partially align with user tags
+**Approach**: [describe what you will try]
 
-## Proposed Changes
+**Rationale**: [why you think this will reduce noise]
 
-| Parameter | Current | Proposed | Rationale |
-|-----------|---------|----------|-----------|
-| umap.nNeighbors | 15 | 10 | Lower nNeighbors preserves more local structure, which should improve within-cluster similarity |
+**Implementation**:
+
+- [step 1]
+- [step 2]
 
 ## Expected Outcomes
 
-- Silhouette score should increase by preserving local neighborhood structure
-- May see slight increase in cluster count (more fine-grained clusters)
-- Noise ratio should remain stable
+- Noise ratio should decrease because [reason]
+- Potential side effects: [any trade-offs expected]
 
-## Risks
+## Success Criteria
 
-- If nNeighbors is too low, may fragment coherent clusters
-- Rollback to nNeighbors=15 if silhouette decreases or noise ratio exceeds 25%
+- Primary: Noise ratio reaches 5-20%
+- Secondary: [any other metrics you're tracking]
+
+## Fallback
+
+If this doesn't work, next hypothesis to test: [brief description]
 ```
 
 ---
 
 ## Termination Conditions
 
-The loop terminates when ANY of these conditions are met:
+### Success
 
-### Success (All targets met)
 ```
-silhouetteScore >= 0.3 AND
-noiseRatio >= 0.05 AND noiseRatio <= 0.20 AND
-tagHomogeneity >= 0.5
+noiseRatio >= 0.05 AND noiseRatio <= 0.20
 ```
 
-### Failure Conditions
-- **Max iterations reached**: 5 iterations without meeting all targets
-- **Declining performance**: Silhouette score decreases for 2 consecutive iterations
-- **Parameter space exhausted**: No valid parameter moves remain
+(Other metrics are agent-proposed and justified)
+
+### Continue Exploring
+
+- As long as you have new hypotheses to test
+- As long as you're making progress or learning
+
+### Stop and Report
+
+- When noise ratio target is achieved
+- When you've exhausted reasonable approaches and want human input
+- When you discover a fundamental limitation that needs discussion
 
 ---
 
 ## Output Structure
 
+Each iteration must save outputs for manual inspection:
+
 ```
 outputs/
 └── improvement-loop/
     ├── current-config.json         # Active configuration
-    ├── summary.json                # Overall loop progress
+    ├── experiment-log.md           # Running log of all experiments
     ├── iteration-1/
-    │   ├── clustering-output.json  # Raw clustering results
+    │   ├── config.json             # Config/approach used for this iteration
+    │   ├── clustering-output.json  # Full clustering results
     │   ├── evaluation.json         # Computed metrics
-    │   └── improvement-plan.md     # Plan created by Evaluator
+    │   └── improvement-plan.md     # Hypothesis, action, result, learnings
     ├── iteration-2/
-    │   ├── clustering-output.json
-    │   ├── evaluation.json
-    │   └── improvement-plan.md
-    └── ...
+    │   └── ...
 ```
 
-### Summary File Schema
+### Clustering Output Schema
+
+The `clustering-output.json` must include:
 
 ```typescript
-interface LoopSummary {
-  startedAt: number;
-  currentIteration: number;
-  status: 'running' | 'success' | 'max_iterations' | 'declining';
-  iterations: Array<{
-    iteration: number;
-    config: {
-      umap: { nNeighbors: number; minDist: number; nComponents: number };
-      hdbscan: { minClusterSize: number; minSamples: number };
-    };
-    metrics: {
-      silhouetteScore: number;
-      noiseRatio: number;
-      tagHomogeneity: number;
-    };
-    meetsAllTargets: boolean;
-    timestamp: number;
+interface ClusteringOutput {
+  config: object; // Whatever config/approach was used
+  clusters: Array<{
+    id: string;
+    noteIds: string[];
+    centroid: number[];
+    representativeNotes: string[];
+    candidateNames: string[];
+    dominantTags: string[];
   }>;
-  bestIteration: number;
-  bestConfig: object;
+  noiseNotes: string[]; // List of all noise note paths
+  metadata: {
+    totalNotes: number;
+    clusteredNotes: number;
+    noiseCount: number;
+    noiseRatio: number;
+    clusterCount: number;
+    timestamp: number;
+  };
 }
 ```
+
+This enables manual inspection of which notes ended up as noise.
 
 ---
 
@@ -224,32 +254,42 @@ interface LoopSummary {
 
 ### Manual Invocation with Claude Code
 
-The loop is designed to be driven by Claude Code through conversation. Each iteration involves two steps:
+The loop is designed to be driven by Claude Code through conversation. Each iteration involves:
 
-**Step 1: Evaluator Phase**
+**Step 1: Run Clustering and Evaluate**
+
 ```
-User: "Evaluate the current clustering and create an improvement plan"
+User: "Run iteration N of the improvement loop"
 
-Claude (as Evaluator):
-1. Runs: npx tsx scripts/evaluate-clustering.ts --vault --config outputs/improvement-loop/current-config.json
-2. Analyzes the metrics output
-3. Creates: outputs/improvement-loop/iteration-N/improvement-plan.md
-4. Reports: "Improvement plan created. Silhouette needs improvement (0.25 vs target 0.3). Proposing to reduce nNeighbors from 15 to 10."
+Claude:
+1. Runs clustering with output to iteration folder:
+   npx tsx scripts/run-clustering.ts \
+     --config outputs/improvement-loop/current-config.json \
+     --output outputs/improvement-loop/iteration-N/clustering-output.json
+
+2. Runs evaluation:
+   npx tsx scripts/evaluate-clustering.ts \
+     --vault \
+     --config outputs/improvement-loop/current-config.json \
+     --output outputs/improvement-loop/iteration-N/evaluation.json
+
+3. Analyzes results and forms hypothesis about why noise ratio is still high
+
+4. Creates: outputs/improvement-loop/iteration-N/improvement-plan.md
+   with hypothesis, proposed experiment, and expected outcomes
 ```
 
-**Step 2: Implementer Phase**
-```
-User: "Implement the changes from the improvement plan"
+**Step 2: Implement and Iterate**
 
-Claude (as Implementer):
-1. Reads: outputs/improvement-loop/iteration-N/improvement-plan.md
-2. Validates proposed changes are within bounds
-3. Updates: outputs/improvement-loop/current-config.json
-4. Runs: npx tsx scripts/run-clustering.ts --config outputs/improvement-loop/current-config.json
-5. Reports: "Changes implemented. New clustering has X clusters, Y% noise. Ready for evaluation."
+```
+Claude:
+1. Implements the proposed changes (config updates, code changes, new approaches)
+2. Runs the next iteration with changes applied
+3. Saves all outputs to outputs/improvement-loop/iteration-N/
+4. Reports findings and proposes next steps
 ```
 
-**Loop continues until termination conditions are met.**
+**Loop continues until noise ratio 5-20% is achieved.**
 
 ---
 
@@ -258,136 +298,155 @@ Claude (as Implementer):
 ### Evaluator Prompt
 
 ```
-You are the Evaluator subagent in a clustering optimization loop.
+You are a clustering researcher investigating how to reduce noise ratio to 5-20%.
 
-Current iteration: N
-Previous results: [summary of metrics from iteration N-1]
+## Context
+- Grid search tested 150 hyperparameter combinations
+- Best noise ratio achieved: 36.1% (target: 5-20%)
+- Hyperparameter tuning alone cannot solve this problem
 
-Your tasks:
-1. Run the evaluation script:
-   npx tsx scripts/evaluate-clustering.ts --vault --config outputs/improvement-loop/current-config.json --output outputs/improvement-loop/iteration-N/evaluation.json
+## Your Task
+1. Analyze the current clustering results
+2. Form a hypothesis about why noise is still too high
+3. Propose an experiment to test your hypothesis
+4. Run the experiment and evaluate results
 
-2. Read the evaluation output and analyze each metric:
-   - Silhouette Score: target >= 0.3
-   - Noise Ratio: target 5-20%
-   - Tag Homogeneity: target >= 50%
+## You Are NOT Limited To
+- Hyperparameter tuning
+- The current clustering algorithm
+- The current pipeline structure
 
-3. Identify which metrics are below target and prioritize the weakest one
+## You CAN
+- Modify scripts or create new ones
+- Try different algorithms
+- Add pre/post-processing steps
+- Use LLM for cluster assignment
+- Anything else that might work
 
-4. Create outputs/improvement-loop/iteration-N/improvement-plan.md with:
-   - Current metrics table with status
-   - Analysis of what the metrics indicate
-   - Specific parameter change (only 1-2 parameters at a time)
-   - Expected impact and risks
-
-5. Update outputs/improvement-loop/summary.json with the new iteration
-
-Parameter bounds:
-- UMAP nNeighbors: [5, 10, 15, 30, 50]
-- UMAP minDist: [0.0, 0.05, 0.1, 0.2, 0.5]
-- UMAP nComponents: [5, 10, 15, 20]
-- HDBSCAN minClusterSize: [3, 5, 10, 15, 20, 30]
-- HDBSCAN minSamples: [1, 3, 5, 10]
-
-If all targets are met, report success and stop the loop.
+## Output Requirements
+Save all outputs to `outputs/improvement-loop/iteration-N/`:
+- `config.json` - Configuration or approach used
+- `clustering-output.json` - Full results with clusters and noise notes
+- `evaluation.json` - All computed metrics
+- `improvement-plan.md` - Your hypothesis, what you tried, results, and next steps
 ```
 
 ### Implementer Prompt
 
-```
-You are the Implementer subagent in a clustering optimization loop.
+````
+You are implementing the experiment proposed in the improvement plan.
 
-Your tasks:
+## Your Task
 1. Read the improvement plan: outputs/improvement-loop/iteration-N/improvement-plan.md
+2. Implement whatever changes are proposed (config, code, new scripts, etc.)
+3. Run the experiment
+4. Save results to the iteration folder
 
-2. Validate the proposed changes:
-   - Ensure all parameter values are within allowed bounds
-   - If invalid, report the issue and suggest valid alternatives
+## Output Requirements
+Save all outputs to `outputs/improvement-loop/iteration-N/`:
+- `config.json` - Configuration or approach used
+- `clustering-output.json` - Full results with clusters and noise notes
+- `evaluation.json` - All computed metrics
 
-3. Update the configuration file: outputs/improvement-loop/current-config.json
+## Example Commands
+```bash
+# Run clustering with output
+npx tsx scripts/run-clustering.ts \
+  --config outputs/improvement-loop/current-config.json \
+  --output outputs/improvement-loop/iteration-N/clustering-output.json
 
-4. Run clustering with the new configuration:
-   npx tsx scripts/run-clustering.ts --config outputs/improvement-loop/current-config.json --output outputs/improvement-loop/iteration-N/clustering-output.json
+# Run evaluation
+npx tsx scripts/evaluate-clustering.ts \
+  --vault \
+  --config outputs/improvement-loop/current-config.json \
+  --output outputs/improvement-loop/iteration-N/evaluation.json
+````
 
-5. Report the results:
-   - Number of clusters created
-   - Noise ratio
-   - Any errors or warnings
-
-Do NOT run the evaluation - that's the Evaluator's job in the next iteration.
 ```
 
 ---
 
-## Parameter Tuning Heuristics
+## Agent Exploration Guidelines
 
-Use these heuristics when proposing parameter changes:
+You are an AI researcher tasked with achieving noise ratio 5-20%. You have full autonomy to explore creative solutions.
 
-### Low Silhouette Score (< 0.3)
-- **Try first**: Reduce `nNeighbors` (preserves local structure)
-- **Also consider**: Reduce `minDist` (tighter clusters)
-- **Check**: If silhouette is negative, embeddings may be poor quality
+### 1. Investigate the Problem
+- Analyze why noise ratio is high (36% was best in grid search)
+- Examine the actual noise notes - what do they have in common?
+- Consider: Is HDBSCAN the right algorithm for this data?
+- Read and analyze: `outputs/grid-search/grid-search-results.json`
 
-### High Noise Ratio (> 20%)
-- **Try first**: Reduce `minClusterSize` (allows smaller clusters)
-- **Also consider**: Reduce `minSamples` (less strict core point requirement)
-- **Caution**: Too low may create spurious clusters
+### 2. Form Hypotheses
+Before making changes, document your hypothesis:
+- "I believe noise is high because..."
+- "This approach might help because..."
 
-### Low Noise Ratio (< 5%)
-- **Try first**: Increase `minClusterSize` (enforces larger clusters)
-- **Also consider**: Increase `minSamples`
-- **Reason**: Very low noise may indicate over-clustering
+### 3. Think Beyond Hyperparameters
+Consider approaches not in the current pipeline:
+- Different clustering algorithms (DBSCAN, K-means, spectral, agglomerative)
+- Pre-processing (filter short notes, weight embeddings by note quality)
+- Post-processing (force-assign noise to nearest cluster, LLM-based assignment)
+- Different embedding models or dimensions
+- Ensemble methods (combine multiple clustering runs)
+- Hierarchical approaches (cluster in stages)
+- Two-pass clustering (coarse then fine)
 
-### Low Tag Homogeneity (< 50%)
-- **Investigate**: May indicate semantic clusters differ from user's mental model
-- **Try**: Increase `nNeighbors` (captures more global structure)
-- **Note**: Low homogeneity isn't always bad if silhouette is high
+### 4. Use Available Tools Creatively
+- LLM refinement can do more than naming - use it for cluster assignment
+- The embedding cache (`outputs/grid-search/embeddings-cache.json`) enables fast iteration
+- You can modify existing scripts or create new ones
+- You can read the codebase: `src/domain/clustering/`, `src/domain/llm/`
 
-### Uneven Cluster Sizes (Gini > 0.6)
-- **Try**: Increase `minClusterSize` to prevent tiny clusters
-- **Consider**: Post-processing to split large clusters (not in hyperparameter scope)
+### 5. Document Everything
+For each experiment, record:
+- Hypothesis: Why you think this will work
+- Action: What you changed
+- Result: What happened
+- Learning: What you learned, even if it failed
 
 ---
 
 ## Example Loop Execution
 
-### Iteration 1
-- **Config**: nNeighbors=15, minDist=0.1, minClusterSize=5
-- **Results**: Silhouette=0.18, Noise=25%, TagHomog=40%
-- **Plan**: Reduce minClusterSize to 3 (address high noise)
+### Iteration 1: Baseline
+- **Approach**: HDBSCAN with default params (minClusterSize=5, minSamples=3)
+- **Results**: Noise=58%, Silhouette=0.21
+- **Hypothesis**: Noise is high because HDBSCAN requires dense regions; many notes are isolated
 
-### Iteration 2
-- **Config**: nNeighbors=15, minDist=0.1, minClusterSize=3
-- **Results**: Silhouette=0.15, Noise=15%, TagHomog=42%
-- **Plan**: Reduce nNeighbors to 10 (address low silhouette)
+### Iteration 2: Lower Density Threshold
+- **Approach**: Reduce minClusterSize=2, minSamples=1
+- **Results**: Noise=42%, Silhouette=0.15
+- **Learning**: Helped but still too much noise; many tiny clusters created
 
-### Iteration 3
-- **Config**: nNeighbors=10, minDist=0.1, minClusterSize=3
-- **Results**: Silhouette=0.28, Noise=18%, TagHomog=48%
-- **Plan**: Reduce minDist to 0.05 (push silhouette over threshold)
+### Iteration 3: Force-Assign Noise
+- **Approach**: After HDBSCAN, assign each noise note to nearest cluster centroid
+- **Results**: Noise=0%, Silhouette=0.08
+- **Learning**: Noise eliminated but silhouette dropped; some assignments are poor fits
 
-### Iteration 4
-- **Config**: nNeighbors=10, minDist=0.05, minClusterSize=3
-- **Results**: Silhouette=0.32, Noise=16%, TagHomog=52%
-- **Status**: SUCCESS - All targets met
+### Iteration 4: Hybrid Approach
+- **Approach**: HDBSCAN + force-assign only notes with similarity > 0.3 to nearest cluster
+- **Results**: Noise=12%, Silhouette=0.18
+- **Status**: SUCCESS - Noise ratio 5-20% achieved
 
 ---
 
-## Monitoring and Rollback
+## Experiment Tracking
 
-### Track Progress
-After each iteration, update `outputs/improvement-loop/summary.json`:
-- Record metrics for trend analysis
-- Flag if silhouette is declining
-- Track best configuration seen
+### Document Each Iteration
+Save to `outputs/improvement-loop/experiment-log.md`:
+- Hypothesis tested
+- Approach used
+- Results (metrics)
+- What was learned
 
-### Rollback Triggers
-- Silhouette decreases by more than 0.1 from previous iteration
-- Noise ratio exceeds 40%
-- Cluster count drops below 5 or exceeds 1000
+### When to Pivot
+- If an approach clearly isn't working after 2-3 variations, try something different
+- If you discover a fundamental limitation, document it and discuss with the user
 
-### Rollback Action
-Revert to the configuration from `bestIteration` and try a different parameter change.
+### Best Practices
+- Keep the best-performing configuration saved
+- Document failed approaches so you don't repeat them
+- Consider combining successful elements from different iterations
 
 ---
 
@@ -443,19 +502,18 @@ Use this data to inform parameter choices without re-running the full grid searc
 
 ### Key Observations
 
-1. **No configuration met all targets** (Silhouette>=0.3, Noise 5-20%, Tag Homogeneity>=50%)
+1. **No hyperparameter configuration achieved noise ratio 5-20%**
+   - Best noise ratio: 36.1% (still above target)
+   - This confirms that hyperparameter tuning alone cannot solve the problem
 
 2. **Trade-offs observed**:
    - Higher `nNeighbors` (30-50) gives better silhouette but higher noise
    - Lower `minClusterSize` (3-5) creates more clusters but doesn't help noise ratio much
-   - Higher `minDist` (0.2-0.5) tends to improve silhouette slightly
+   - Lower noise configs tend to have worse silhouette
 
-3. **Best balanced config**: `nNeighbors=10, minDist=0.5, minClusterSize=5`
-   - Silhouette: 0.2114 (best among top tag homogeneity configs)
-   - Noise: 57.9% (still high but lower than many)
-   - Tag Homogeneity: 9.0% (highest observed)
-
-4. **Recommendations for improvement loop**:
-   - Focus on reducing noise ratio first (try `minClusterSize=3` with `minSamples=1`)
-   - Consider that tag homogeneity may be inherently low for this vault
-   - The silhouette target of 0.3 may need to be relaxed to 0.2 for this dataset
+3. **Implication for the improvement loop**:
+   - Must go beyond hyperparameter tuning
+   - Consider post-processing (force-assign noise notes)
+   - Consider different algorithms or hybrid approaches
+   - The agent should propose appropriate silhouette/homogeneity targets based on what's achievable
+```
