@@ -3,7 +3,12 @@
  * Run complete pipeline: vault → embeddings → clusters → concepts
  *
  * Usage:
- *   OPENAI_API_KEY=xxx ANTHROPIC_API_KEY=xxx npx tsx scripts/run-full-pipeline.ts ~/path/to/vault [options]
+ *   TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx ANTHROPIC_API_KEY=xxx npx tsx scripts/run-full-pipeline.ts [options]
+ *
+ * Environment:
+ *   TEST_VAULT_PATH     Required. Path to the Obsidian vault to test with.
+ *   OPENAI_API_KEY      Required for embedding
+ *   ANTHROPIC_API_KEY   Required for LLM naming
  *
  * Options:
  *   --output <path>   Output file (default: outputs/full-pipeline-run.json)
@@ -11,7 +16,7 @@
  */
 
 import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
-import {dirname, resolve} from 'node:path';
+import {dirname} from 'node:path';
 import {OpenAIEmbeddingAdapter} from '../src/adapters/openai/OpenAIEmbeddingAdapter';
 import {AnthropicLLMAdapter} from '../src/adapters/anthropic/AnthropicLLMAdapter';
 import {EmbeddingOrchestrator} from '../src/domain/embedding/embedBatch';
@@ -19,7 +24,7 @@ import {ClusteringPipeline} from '../src/domain/clustering/pipeline';
 import {runLLMPipeline} from '../src/domain/llm/pipeline';
 import type {Cluster} from '../src/domain/clustering/types';
 import type {TrackedConcept, MisfitNote} from '../src/domain/llm/types';
-import {getArg, readVault} from './lib/vault-helpers';
+import {getArg, readVault, requireTestVaultPath} from './lib/vault-helpers';
 
 // ============ Types ============
 
@@ -44,33 +49,25 @@ async function main() {
 
 	if (args.includes('--help') || args.includes('-h')) {
 		console.log(`
-Usage: OPENAI_API_KEY=xxx ANTHROPIC_API_KEY=xxx npx tsx scripts/run-full-pipeline.ts ~/path/to/vault [options]
+Usage: TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx ANTHROPIC_API_KEY=xxx npx tsx scripts/run-full-pipeline.ts [options]
 
 Options:
   --output <path>   Output file (default: outputs/full-pipeline-run.json)
   --help, -h        Show help
 
 Environment:
+  TEST_VAULT_PATH     Required. Path to the Obsidian vault to test with.
   OPENAI_API_KEY      Required for embedding
   ANTHROPIC_API_KEY   Required for LLM naming
 
 Example:
-  OPENAI_API_KEY=sk-xxx ANTHROPIC_API_KEY=sk-xxx npx tsx scripts/run-full-pipeline.ts ~/Documents/MyVault
+  TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=sk-xxx ANTHROPIC_API_KEY=sk-xxx npx tsx scripts/run-full-pipeline.ts
 `);
 		process.exit(0);
 	}
 
-	const vaultPath = args.find((a) => !a.startsWith('--'));
-	if (!vaultPath) {
-		console.error('Error: Vault path required');
-		process.exit(1);
-	}
-
-	const resolvedVaultPath = resolve(vaultPath);
-	if (!existsSync(resolvedVaultPath)) {
-		console.error(`Error: Vault path does not exist: ${resolvedVaultPath}`);
-		process.exit(1);
-	}
+	// Get vault path from environment
+	const resolvedVaultPath = requireTestVaultPath();
 
 	const outputPath = getArg(args, '--output') ?? 'outputs/full-pipeline-run.json';
 

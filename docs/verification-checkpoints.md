@@ -5,8 +5,30 @@ This document defines a repeatable testing process with 6 checkpoints. Each chec
 - **Verification**: Commands to run
 - **Pass Criteria**: What success looks like
 
-**Vault Testing**: Uses live vault path directly (e.g., `~/Documents/MyVault`)
+**Vault Testing**: Uses `TEST_VAULT_PATH` environment variable (set in `.env` or inline)
 **Output Format**: Full details with note titles for thorough inspection
+
+---
+
+## Environment Setup
+
+Before running any test scripts, configure your environment variables in `.env`:
+
+```bash
+# .env file
+TEST_VAULT_PATH=~/Documents/MyVault
+OPENAI_API_KEY=sk-...
+VOYAGE_API_KEY=pa-...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The scripts automatically load `.env` via dotenv. Alternatively, pass variables inline:
+
+```bash
+TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx npx tsx scripts/...
+```
+
+**Note**: If `TEST_VAULT_PATH` is not set, scripts will exit with an error.
 
 ---
 
@@ -72,9 +94,9 @@ interface EmbeddingTestOutput {
 npm run test -- src/adapters/openai/
 npm run test -- src/adapters/voyage/
 
-# Live API test (pick one)
-OPENAI_API_KEY=xxx npx tsx scripts/test-embedding-provider.ts ~/Documents/MyVault --provider openai --limit 20
-VOYAGE_API_KEY=xxx npx tsx scripts/test-embedding-provider.ts ~/Documents/MyVault --provider voyage --limit 20
+# Live API test (pick one, assumes .env is configured)
+npx tsx scripts/test-embedding-provider.ts --provider openai --limit 20
+npx tsx scripts/test-embedding-provider.ts --provider voyage --limit 20
 ```
 
 **Pass Criteria:**
@@ -130,8 +152,8 @@ interface ClusteringV2Output {
 # Unit tests
 npm run test -- src/domain/clustering/
 
-# Run on vault
-OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts ~/Documents/MyVault
+# Run on vault (assumes .env is configured)
+npx tsx scripts/run-clustering.ts
 ```
 
 **Pass Criteria:**
@@ -253,8 +275,8 @@ npm run test -- src/domain/evolution/
 # 1. First run (already done in Checkpoint 3)
 cp outputs/vault-clusters-v2.json outputs/vault-clusters-v2-baseline.json
 
-# 2. Modify vault (add/edit/delete some notes), re-cluster
-OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts ~/Documents/MyVault
+# 2. Modify vault (add/edit/delete some notes), re-cluster (assumes .env is configured)
+npx tsx scripts/run-clustering.ts
 mv outputs/vault-clusters-v2.json outputs/vault-clusters-v2-modified.json
 
 # 3. Detect evolution
@@ -306,8 +328,8 @@ npm run typecheck
 npm run test
 npm run build
 
-# Full pipeline
-OPENAI_API_KEY=xxx ANTHROPIC_API_KEY=xxx npx tsx scripts/run-full-pipeline.ts ~/Documents/MyVault
+# Full pipeline (assumes .env is configured)
+npx tsx scripts/run-full-pipeline.ts
 ```
 
 **Pass Criteria:**
@@ -339,10 +361,10 @@ OPENAI_API_KEY=xxx ANTHROPIC_API_KEY=xxx npx tsx scripts/run-full-pipeline.ts ~/
 
 | Script | Purpose | Inputs | Outputs |
 |--------|---------|--------|---------|
-| `test-embedding-provider.ts` | Test real embedding APIs | vault path, provider, limit | `embedding-provider-test.json` |
-| `run-clustering.ts` | Run embedding-based clustering | vault path | `vault-clusters-v2.json` |
+| `test-embedding-provider.ts` | Test real embedding APIs | `TEST_VAULT_PATH` env, provider, limit | `embedding-provider-test.json` |
+| `run-clustering.ts` | Run embedding-based clustering | `TEST_VAULT_PATH` env | `vault-clusters-v2.json` |
 | `test-evolution.ts` | Test cluster evolution detection | old/new clusters, concepts | `evolution-test.json` |
-| `run-full-pipeline.ts` | End-to-end pipeline | vault path | `full-pipeline-run.json` |
+| `run-full-pipeline.ts` | End-to-end pipeline | `TEST_VAULT_PATH` env | `full-pipeline-run.json` |
 
 ---
 

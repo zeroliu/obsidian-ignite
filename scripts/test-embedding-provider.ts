@@ -3,7 +3,12 @@
  * Test embedding provider with real vault
  *
  * Usage:
- *   OPENAI_API_KEY=xxx npx tsx scripts/test-embedding-provider.ts ~/path/to/vault [options]
+ *   TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx npx tsx scripts/test-embedding-provider.ts [options]
+ *
+ * Environment:
+ *   TEST_VAULT_PATH   Required. Path to the Obsidian vault to test with.
+ *   OPENAI_API_KEY    Required for OpenAI provider
+ *   VOYAGE_API_KEY    Required for Voyage provider
  *
  * Options:
  *   --provider <openai|voyage>  Embedding provider (default: openai)
@@ -13,13 +18,13 @@
  */
 
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
-import {basename, dirname, resolve} from 'node:path';
+import {basename, dirname} from 'node:path';
 import {OpenAIEmbeddingAdapter} from '../src/adapters/openai/OpenAIEmbeddingAdapter';
 import {VoyageEmbeddingAdapter} from '../src/adapters/voyage/VoyageEmbeddingAdapter';
 import type {IEmbeddingProvider} from '../src/ports/IEmbeddingProvider';
 import {prepareTextForEmbedding} from '../src/domain/embedding/prepareText';
 import {DEFAULT_TEXT_PREPARE_CONFIG} from '../src/domain/embedding/types';
-import {findMarkdownFiles, getArg} from './lib/vault-helpers';
+import {findMarkdownFiles, getArg, requireTestVaultPath} from './lib/vault-helpers';
 
 // ============ Types ============
 
@@ -61,7 +66,7 @@ async function main() {
 	// Help
 	if (args.includes('--help') || args.includes('-h')) {
 		console.log(`
-Usage: OPENAI_API_KEY=xxx npx tsx scripts/test-embedding-provider.ts ~/path/to/vault [options]
+Usage: TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx npx tsx scripts/test-embedding-provider.ts [options]
 
 Options:
   --provider <openai|voyage>  Embedding provider (default: openai)
@@ -70,28 +75,18 @@ Options:
   --help, -h                  Show help
 
 Environment:
+  TEST_VAULT_PATH   Required. Path to the Obsidian vault to test with.
   OPENAI_API_KEY    Required for OpenAI provider
   VOYAGE_API_KEY    Required for Voyage provider
 
 Example:
-  OPENAI_API_KEY=sk-xxx npx tsx scripts/test-embedding-provider.ts ~/Documents/MyVault --limit 10
+  TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=sk-xxx npx tsx scripts/test-embedding-provider.ts --limit 10
 `);
 		process.exit(0);
 	}
 
-	// Parse args
-	const vaultPath = args.find((a) => !a.startsWith('--'));
-	if (!vaultPath) {
-		console.error('Error: Vault path required');
-		console.error('Usage: npx tsx scripts/test-embedding-provider.ts ~/path/to/vault');
-		process.exit(1);
-	}
-
-	const resolvedVaultPath = resolve(vaultPath);
-	if (!existsSync(resolvedVaultPath)) {
-		console.error(`Error: Vault path does not exist: ${resolvedVaultPath}`);
-		process.exit(1);
-	}
+	// Get vault path from environment
+	const resolvedVaultPath = requireTestVaultPath();
 
 	const providerName = getArg(args, '--provider') ?? 'openai';
 	const limit = parseInt(getArg(args, '--limit') ?? '20', 10);

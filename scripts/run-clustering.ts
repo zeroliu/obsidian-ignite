@@ -3,7 +3,11 @@
  * Run embedding-based clustering (V2) on a vault
  *
  * Usage:
- *   OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts ~/path/to/vault [options]
+ *   TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts [options]
+ *
+ * Environment:
+ *   TEST_VAULT_PATH   Required. Path to the Obsidian vault to test with.
+ *   OPENAI_API_KEY    Required for embedding
  *
  * Options:
  *   --output <path>   Output file (default: outputs/vault-clusters-v2.json)
@@ -11,12 +15,12 @@
  */
 
 import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
-import {basename, dirname, resolve} from 'node:path';
+import {basename, dirname} from 'node:path';
 import {OpenAIEmbeddingAdapter} from '../src/adapters/openai/OpenAIEmbeddingAdapter';
 import {EmbeddingOrchestrator} from '../src/domain/embedding/embedBatch';
 import {ClusteringPipeline} from '../src/domain/clustering/pipeline';
 import {cosineSimilarity} from '../src/domain/clustering/centroidCalculator';
-import {getArg, readVault} from './lib/vault-helpers';
+import {getArg, readVault, requireTestVaultPath} from './lib/vault-helpers';
 
 // ============ Types ============
 
@@ -66,32 +70,24 @@ async function main() {
 
 	if (args.includes('--help') || args.includes('-h')) {
 		console.log(`
-Usage: OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts ~/path/to/vault [options]
+Usage: TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts [options]
 
 Options:
   --output <path>   Output file (default: outputs/vault-clusters-v2.json)
   --help, -h        Show help
 
 Environment:
+  TEST_VAULT_PATH   Required. Path to the Obsidian vault to test with.
   OPENAI_API_KEY    Required for embedding
 
 Example:
-  OPENAI_API_KEY=sk-xxx npx tsx scripts/run-clustering.ts ~/Documents/MyVault
+  TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=sk-xxx npx tsx scripts/run-clustering.ts
 `);
 		process.exit(0);
 	}
 
-	const vaultPath = args.find((a) => !a.startsWith('--'));
-	if (!vaultPath) {
-		console.error('Error: Vault path required');
-		process.exit(1);
-	}
-
-	const resolvedVaultPath = resolve(vaultPath);
-	if (!existsSync(resolvedVaultPath)) {
-		console.error(`Error: Vault path does not exist: ${resolvedVaultPath}`);
-		process.exit(1);
-	}
+	// Get vault path from environment
+	const resolvedVaultPath = requireTestVaultPath();
 
 	const outputPath = getArg(args, '--output') ?? 'outputs/vault-clusters-v2.json';
 
