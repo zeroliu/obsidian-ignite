@@ -204,11 +204,11 @@ Example:
     --concepts outputs/vault-concepts-v2.json
 
 Workflow:
-  1. Run clustering to get baseline: run-clustering-v2.ts
+  1. Run clustering to get baseline: run-clustering.ts
   2. Copy baseline: cp outputs/vault-clusters-v2.json outputs/vault-clusters-v2-baseline.json
   3. Run LLM naming: refine-clusters-llm.ts
   4. Modify vault (add/edit/delete notes)
-  5. Re-cluster: run-clustering-v2.ts
+  5. Re-cluster: run-clustering.ts
   6. Rename: mv outputs/vault-clusters-v2.json outputs/vault-clusters-v2-modified.json
   7. Run this script to detect evolution
 `);

@@ -1,72 +1,58 @@
-/**
- * Clustering Domain Module
- *
- * This module provides algorithms for clustering notes based on:
- * - Folder structure
- * - Tags
- * - Links between notes
- * - Title keywords (with CJK support)
- */
-
 // Types
-export type { Cluster, ClusteringConfig, ClusteringInput } from './types';
-export { DEFAULT_CLUSTERING_CONFIG, createCluster, generateClusterId } from './types';
+export type {
+	Cluster,
+	UMAPConfig,
+	HDBSCANConfig,
+	ClusterAssignment,
+	EmbeddingCluster,
+	ClusteringConfig,
+	ClusteringInput,
+	ClusteringResult,
+	ClusteringState,
+} from './types';
 
-// Algorithms
-export { clusterByFolder, getFoldersByDepth, isSubfolderOf } from './clusterByFolder';
-export { refineByTags, getTagCounts, findDominantTags, normalizeTag } from './refineByTags';
 export {
-	analyzeLinks,
-	calculateLinkDensity,
-	countInterClusterLinks,
-	calculateLinkOverlap,
-} from './analyzeLinks';
-export {
-	splitByLinkCommunities,
-	buildBidirectionalAdjacency,
-	findConnectedComponents,
-	findCoreNotes,
-	assignNotesToCores,
-	splitOrphansByTitleKeywords,
-} from './splitByLinkCommunities';
-export {
-	mergeRelatedClusters,
-	areSimilarSize,
-	mergeTwoClusters,
-	findCommonFolderPath,
-} from './mergeRelatedClusters';
-export {
-	groupByTitleKeywords,
-	extractTitleKeywords,
-	detectLanguage,
-	isCJK,
-	segmentCJK,
-	extractEnglishKeywords,
-	detectJournalYear,
-	splitByQuarter,
-} from './groupByTitleKeywords';
-export {
-	normalizeClusterSizes,
-	splitLargeCluster,
-	mergeSmallClusters,
-} from './normalizeClusterSizes';
-export {
-	identifySpecialNotes,
-	isTemplateNote,
-	isStubNote,
-	assignStubNotesToClusters,
-	createTemplatesCluster,
-	preprocessSpecialNotes,
-} from './handleSpecialNotes';
+	createCluster,
+	generateClusterId,
+	DEFAULT_UMAP_CONFIG,
+	DEFAULT_HDBSCAN_CONFIG,
+	DEFAULT_CLUSTERING_CONFIG,
+	toLegacyCluster,
+	generateEmbeddingClusterId,
+} from './types';
 
-// New improvement modules
-export { mergeSmallClustersIntoLarge } from './mergeSmallClustersIntoLarge';
+// UMAP Reducer
+export { UMAPReducer, reduceEmbeddings } from './umapReducer';
+export type { UMAPResult } from './umapReducer';
+
+// HDBSCAN Clusterer
+export { HDBSCANClusterer, clusterPoints } from './hdbscanClusterer';
+export type { HDBSCANResult } from './hdbscanClusterer';
+
+// Centroid Calculator
 export {
-	enhanceCohesionWithImplicitLinks,
-	calculateImplicitLinkDensity,
-	combineExplicitAndImplicitDensity,
-	analyzeTagCohesion,
-} from './enhanceCohesionWithImplicitLinks';
+	computeCentroid,
+	cosineSimilarity,
+	euclideanDistance,
+	selectRepresentatives,
+	computeClusterCentroids,
+	findNearestCentroid,
+} from './centroidCalculator';
+export type { ClusterCentroidResult } from './centroidCalculator';
+
+// Incremental Updater
+export {
+	detectChanges,
+	assignNotesToClusters,
+	applyIncrementalUpdate,
+	updateClusteringState,
+} from './incrementalUpdater';
+export type {
+	ChangeDetectionResult,
+	IncrementalUpdateResult,
+	NoteAssignment,
+} from './incrementalUpdater';
 
 // Pipeline
-export { runClusteringPipeline } from './pipeline';
+export { ClusteringPipeline, runClusteringPipeline } from './pipeline';
+export type { PipelineInput, PipelineResult } from './pipeline';

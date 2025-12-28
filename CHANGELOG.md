@@ -102,7 +102,7 @@ const concept: TrackedConcept = {
 
 - **Utility Scripts**: New scripts for running the pipeline
   - `scripts/run-full-pipeline.ts` - Run complete vault → embeddings → clusters → concepts pipeline
-  - `scripts/run-clustering-v2.ts` - Run embedding-based clustering
+  - `scripts/run-clustering.ts` - Run embedding-based clustering
   - `scripts/test-evolution.ts` - Test evolution detection
   - `scripts/test-embedding-provider.ts` - Test embedding providers
 

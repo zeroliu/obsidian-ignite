@@ -15,7 +15,7 @@ import {dirname, resolve} from 'node:path';
 import {OpenAIEmbeddingAdapter} from '../src/adapters/openai/OpenAIEmbeddingAdapter';
 import {AnthropicLLMAdapter} from '../src/adapters/anthropic/AnthropicLLMAdapter';
 import {EmbeddingOrchestrator} from '../src/domain/embedding/embedBatch';
-import {ClusteringV2Pipeline} from '../src/domain/clustering-v2/pipeline';
+import {ClusteringPipeline} from '../src/domain/clustering/pipeline';
 import {runLLMPipeline} from '../src/domain/llm/pipeline';
 import type {Cluster} from '../src/domain/clustering/types';
 import type {TrackedConcept, MisfitNote} from '../src/domain/llm/types';
@@ -152,7 +152,7 @@ Example:
 	console.error('Stage 3: Clustering (UMAP + HDBSCAN)...');
 	const clusteringStartTime = Date.now();
 
-	const clusteringPipeline = new ClusteringV2Pipeline();
+	const clusteringPipeline = new ClusteringPipeline();
 	const clusteringResult = await clusteringPipeline.run({
 		embeddedNotes: embeddingResult.notes,
 		noteTags,

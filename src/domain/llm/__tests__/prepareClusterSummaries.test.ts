@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import {
-	prepareClusterSummaries,
-	selectRepresentativeTitles,
-	batchClusterSummaries,
-} from '../prepareClusterSummaries';
 import type { Cluster } from '@/domain/clustering/types';
 import type { FileInfo } from '@/ports/IVaultProvider';
+import { describe, expect, it } from 'vitest';
+import {
+	batchClusterSummaries,
+	prepareClusterSummaries,
+	selectRepresentativeTitles,
+} from '../prepareClusterSummaries';
 
 describe('prepareClusterSummaries', () => {
 	const createFileMap = (paths: string[]): Map<string, FileInfo> => {

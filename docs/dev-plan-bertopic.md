@@ -40,13 +40,13 @@ New:     Notes → Embedding API → UMAP → HDBSCAN → LLM Naming
 
 Delete the entire `src/domain/clustering/` directory except:
 
-- `handleSpecialNotes.ts` - Move to clustering-v2 (stub/template detection still useful)
-- `filterFiles.ts` - Move to clustering-v2 (path exclusion still useful)
-- `analyzeLinks.ts` - Move to clustering-v2 (link density calculation still useful)
+- `handleSpecialNotes.ts` - Move to clustering (stub/template detection still useful)
+- `filterFiles.ts` - Move to clustering (path exclusion still useful)
+- `analyzeLinks.ts` - Move to clustering (link density calculation still useful)
 
 Files to delete:
 
-- `pipeline.ts` - Replaced by `clustering-v2/pipeline.ts`
+- `pipeline.ts` - Replaced by `clustering/pipeline.ts`
 - `clusterByFolder.ts`
 - `refineByTags.ts`
 - `mergeRelatedClusters.ts`
@@ -55,7 +55,7 @@ Files to delete:
 - `splitByLinkCommunities.ts`
 - `enhanceCohesionWithImplicitLinks.ts`
 - `mergeSmallClustersIntoLarge.ts`
-- `types.ts` - Replaced by `clustering-v2/types.ts`
+- `types.ts` - Replaced by `clustering/types.ts`
 - `index.ts`
 - All `__tests__/` files for the above
 
@@ -100,7 +100,7 @@ src/
 │   │       ├── embedBatch.test.ts
 │   │       └── cache.test.ts
 │   │
-│   ├── clustering-v2/                      # NEW: Embedding-based clustering
+│   ├── clustering/                         # Embedding-based clustering
 │   │   ├── types.ts                       # Cluster types
 │   │   ├── umapReducer.ts                 # UMAP dimensionality reduction
 │   │   ├── hdbscanClusterer.ts            # HDBSCAN clustering
@@ -226,7 +226,7 @@ export interface TextPrepareConfig {
 }
 ```
 
-### Clustering V2 Types (`src/domain/clustering-v2/types.ts`)
+### Clustering Types (`src/domain/clustering/types.ts`)
 
 ```typescript
 export interface UMAPConfig {
@@ -370,7 +370,7 @@ export interface TrackedConcept {
 
 ### Step 8: UMAP Reducer
 
-1. Create `src/domain/clustering-v2/umapReducer.ts`
+1. Create `src/domain/clustering/umapReducer.ts`
 2. Use `umap-js` library
 3. Config: nNeighbors=15, minDist=0.1, nComponents=10, metric='cosine'
 4. Save transform for incremental updates
@@ -378,7 +378,7 @@ export interface TrackedConcept {
 
 ### Step 9: HDBSCAN Clusterer
 
-1. Create `src/domain/clustering-v2/hdbscanClusterer.ts`
+1. Create `src/domain/clustering/hdbscanClusterer.ts`
 2. Use `hdbscan-ts` library
 3. Config: minClusterSize=5, minSamples=3
 4. Handle noise points (label = -1)
@@ -386,14 +386,14 @@ export interface TrackedConcept {
 
 ### Step 10: Centroid Calculator
 
-1. Create `src/domain/clustering-v2/centroidCalculator.ts`
+1. Create `src/domain/clustering/centroidCalculator.ts`
 2. Compute cluster centroids (mean of embeddings)
 3. Select representative notes (closest to centroid)
 4. Write tests
 
 ### Step 11: Incremental Updater
 
-1. Create `src/domain/clustering-v2/incrementalUpdater.ts`
+1. Create `src/domain/clustering/incrementalUpdater.ts`
 2. For <5% vault changes:
    - Embed only new/modified notes
    - Project using existing UMAP transform
@@ -403,7 +403,7 @@ export interface TrackedConcept {
 
 ### Step 12: Clustering V2 Pipeline
 
-1. Create `src/domain/clustering-v2/pipeline.ts`
+1. Create `src/domain/clustering/pipeline.ts`
 2. Orchestrate: prepare text → embed → UMAP → HDBSCAN → build clusters
 3. Populate cluster metadata for LLM compatibility:
    - `representativeNotes`: Select 5 notes closest to centroid (cosine similarity)
@@ -558,7 +558,7 @@ The legacy clustering will be **completely removed** after the embedding pipelin
 
 ### Phase 1: Build New Pipeline
 
-1. Implement embedding pipeline in `src/domain/clustering-v2/`
+1. Implement embedding pipeline in `src/domain/clustering/`
 2. Keep legacy in `src/domain/clustering/` during development
 3. Both pipelines exist but only new one is used
 
@@ -571,7 +571,7 @@ The legacy clustering will be **completely removed** after the embedding pipelin
 ### Phase 3: Remove Legacy
 
 1. Delete `src/domain/clustering/` (except `handleSpecialNotes.ts`, `filterFiles.ts`)
-2. Move kept files to `src/domain/clustering-v2/`
+2. Move kept files to `src/domain/clustering/`
 3. Rename `clustering-v2/` to `clustering/`
 4. Update all imports
 
@@ -617,7 +617,7 @@ M1 → M2 → M3 → M4 → M5 → M6 (Embedding infrastructure)
 | M4 | Batch Orchestration | `embedBatch.ts` with cache integration | 2 |
 | M5 | OpenAI Adapter | `OpenAIEmbeddingAdapter.ts` | 2 |
 | M6 | Voyage AI Adapter | `VoyageEmbeddingAdapter.ts` | 2 |
-| M7 | UMAP Reduction | `umapReducer.ts` + clustering-v2 types | 3 |
+| M7 | UMAP Reduction | `umapReducer.ts` + clustering types | 3 |
 | M8 | HDBSCAN Clustering | `hdbscanClusterer.ts` | 2 |
 | M9 | Centroid Calculator | `centroidCalculator.ts` | 1 |
 | M10 | Clustering Pipeline | `pipeline.ts` + `incrementalUpdater.ts` | 5 |
@@ -852,7 +852,7 @@ npm run test -- VoyageEmbeddingAdapter.test.ts
 
 #### Tasks
 
-7.1. **Create clustering-v2 types** (`src/domain/clustering-v2/types.ts`)
+7.1. **Create clustering types** (`src/domain/clustering/types.ts`)
    - `UMAPConfig` - nNeighbors, minDist, nComponents, metric
    - `HDBSCANConfig` - minClusterSize, minSamples
    - `EmbeddingCluster` - Cluster with centroid, noteIds, metadata
@@ -861,7 +861,7 @@ npm run test -- VoyageEmbeddingAdapter.test.ts
 7.2. **Add npm dependency**
    - Add `umap-js` to `package.json`
 
-7.3. **Create UMAP reducer** (`src/domain/clustering-v2/umapReducer.ts`)
+7.3. **Create UMAP reducer** (`src/domain/clustering/umapReducer.ts`)
    - `UMAPReducer` class:
      - `fit(embeddings: number[][]): Promise<number[][]>` - Full fit and transform
      - `transform(newEmbeddings: number[][]): Promise<number[][]>` - Transform using fitted model
@@ -869,7 +869,7 @@ npm run test -- VoyageEmbeddingAdapter.test.ts
    - Config: nNeighbors=15, minDist=0.1, nComponents=10, metric='cosine'
    - Save transform for incremental updates
 
-7.4. **Write unit tests** (`src/domain/clustering-v2/__tests__/umapReducer.test.ts`)
+7.4. **Write unit tests** (`src/domain/clustering/__tests__/umapReducer.test.ts`)
    - Output has correct dimensions (n_samples x nComponents)
    - Similar inputs cluster together in reduced space
    - Transform preserves learned structure
@@ -895,13 +895,13 @@ npm run test -- umapReducer.test.ts
 8.1. **Add npm dependency**
    - Add `hdbscan-ts` to `package.json`
 
-8.2. **Create HDBSCAN clusterer** (`src/domain/clustering-v2/hdbscanClusterer.ts`)
+8.2. **Create HDBSCAN clusterer** (`src/domain/clustering/hdbscanClusterer.ts`)
    - `HDBSCANClusterer` class:
      - `cluster(points: number[][]): ClusterAssignment[]`
      - Handle noise points (label = -1)
    - Config: minClusterSize=5, minSamples=3
 
-8.3. **Write unit tests** (`src/domain/clustering-v2/__tests__/hdbscanClusterer.test.ts`)
+8.3. **Write unit tests** (`src/domain/clustering/__tests__/hdbscanClusterer.test.ts`)
    - Well-separated clusters are identified
    - Noise points are labeled -1
    - Configuration affects cluster count
@@ -924,12 +924,12 @@ npm run test -- hdbscanClusterer.test.ts
 
 #### Tasks
 
-9.1. **Create centroid calculator** (`src/domain/clustering-v2/centroidCalculator.ts`)
+9.1. **Create centroid calculator** (`src/domain/clustering/centroidCalculator.ts`)
    - `computeCentroid(embeddings: number[][]): number[]` - Mean of embeddings
    - `selectRepresentatives(embeddings: number[][], centroid: number[], topK: number): number[]` - Indices closest to centroid
    - `cosineSimilarity(a: number[], b: number[]): number` - Similarity function
 
-9.2. **Write unit tests** (`src/domain/clustering-v2/__tests__/centroidCalculator.test.ts`)
+9.2. **Write unit tests** (`src/domain/clustering/__tests__/centroidCalculator.test.ts`)
    - Centroid is mean of cluster embeddings
    - Representatives are closest to centroid
    - Cosine similarity is correct
@@ -953,17 +953,17 @@ npm run test -- centroidCalculator.test.ts
 #### Tasks
 
 10.1. **Move utility files to clustering-v2**
-   - Copy `handleSpecialNotes.ts` → `src/domain/clustering-v2/`
-   - Copy `filterFiles.ts` → `src/domain/clustering-v2/`
-   - Copy `analyzeLinks.ts` → `src/domain/clustering-v2/`
+   - Copy `handleSpecialNotes.ts` → `src/domain/clustering/`
+   - Copy `filterFiles.ts` → `src/domain/clustering/`
+   - Copy `analyzeLinks.ts` → `src/domain/clustering/`
    - Update imports
 
-10.2. **Create incremental updater** (`src/domain/clustering-v2/incrementalUpdater.ts`)
+10.2. **Create incremental updater** (`src/domain/clustering/incrementalUpdater.ts`)
    - Detect change percentage (new/modified/deleted notes)
    - For <5% changes: assign to nearest centroid
    - For ≥5% changes: trigger full re-cluster
 
-10.3. **Create pipeline** (`src/domain/clustering-v2/pipeline.ts`)
+10.3. **Create pipeline** (`src/domain/clustering/pipeline.ts`)
    - `ClusteringV2Pipeline` class:
      - `run(input: ClusteringV2Input): Promise<ClusteringV2Result>`
    - Orchestrate: filter → preprocess → embed → UMAP → HDBSCAN → build clusters
@@ -976,13 +976,13 @@ npm run test -- centroidCalculator.test.ts
    - Include `toLegacyCluster()` for compatibility
 
 10.4. **Write tests**
-   - `src/domain/clustering-v2/__tests__/incrementalUpdater.test.ts`
-   - `src/domain/clustering-v2/__tests__/pipeline.test.ts`
+   - `src/domain/clustering/__tests__/incrementalUpdater.test.ts`
+   - `src/domain/clustering/__tests__/pipeline.test.ts`
 
 #### Acceptance Criteria
 
 ```bash
-npm run test -- src/domain/clustering-v2/
+npm run test -- src/domain/clustering/
 # All tests pass
 ```
 
@@ -1108,7 +1108,7 @@ npm run test -- src/domain/evolution/
      - `groupByTitleKeywords.ts`, `normalizeClusterSizes.ts`
      - `splitByLinkCommunities.ts`, `enhanceCohesionWithImplicitLinks.ts`
      - `mergeSmallClustersIntoLarge.ts`
-   - Rename `clustering-v2/` → `clustering/`
+   - ~~Rename `clustering-v2/` → `clustering/`~~ (completed)
    - Update all imports
 
 13.5. **Final verification**

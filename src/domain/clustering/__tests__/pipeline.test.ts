@@ -1,14 +1,14 @@
 import type { EmbeddedNote } from '@/domain/embedding/types';
 import type { FileInfo } from '@/ports/IVaultProvider';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ClusteringV2Pipeline, runClusteringV2Pipeline } from '../pipeline';
+import { ClusteringPipeline, runClusteringPipeline } from '../pipeline';
 import type { PipelineInput } from '../pipeline';
 
-describe('ClusteringV2Pipeline', () => {
-	let pipeline: ClusteringV2Pipeline;
+describe('ClusteringPipeline', () => {
+	let pipeline: ClusteringPipeline;
 
 	beforeEach(() => {
-		pipeline = new ClusteringV2Pipeline();
+		pipeline = new ClusteringPipeline();
 	});
 
 	describe('constructor', () => {
@@ -19,7 +19,7 @@ describe('ClusteringV2Pipeline', () => {
 		});
 
 		it('should merge custom config', () => {
-			const customPipeline = new ClusteringV2Pipeline({
+			const customPipeline = new ClusteringPipeline({
 				minNotesForClustering: 20,
 			});
 			expect(customPipeline.getConfig().minNotesForClustering).toBe(20);
@@ -157,11 +157,11 @@ describe('ClusteringV2Pipeline', () => {
 		});
 	});
 
-	describe('runClusteringV2Pipeline convenience function', () => {
+	describe('runClusteringPipeline convenience function', () => {
 		it('should run pipeline in one call', async () => {
 			const input = createPipelineInput(20);
 
-			const { result } = await runClusteringV2Pipeline(input);
+			const { result } = await runClusteringPipeline(input);
 
 			expect(result.stats.totalNotes).toBe(20);
 		});
