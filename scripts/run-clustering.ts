@@ -10,6 +10,7 @@
  *   OPENAI_API_KEY    Required for embedding
  *
  * Options:
+ *   --config <path>   Custom clustering config JSON
  *   --output <path>   Output file (default: outputs/vault-clusters-v2.json)
  *   --help, -h        Show help
  *
@@ -18,13 +19,15 @@
  *   The cache is content-hash based, so only modified notes are re-embedded.
  */
 
-import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {basename, dirname, join} from 'node:path';
 import {OpenAIEmbeddingAdapter} from '../src/adapters/openai/OpenAIEmbeddingAdapter';
 import {EmbeddingOrchestrator} from '../src/domain/embedding/embedBatch';
 import {EmbeddingCacheManager} from '../src/domain/embedding/cache';
 import {ClusteringPipeline} from '../src/domain/clustering/pipeline';
 import {cosineSimilarity} from '../src/domain/clustering/centroidCalculator';
+import type {ClusteringConfig} from '../src/domain/clustering/types';
+import {DEFAULT_CLUSTERING_CONFIG} from '../src/domain/clustering/types';
 import {getArg, readVault, requireTestVaultPath} from './lib/vault-helpers';
 import {FileStorageAdapter} from './lib/file-storage';
 
@@ -45,6 +48,10 @@ interface ClusteringOutput {
 			cacheMisses: number;
 			tokensProcessed: number;
 			estimatedCost: number;
+		};
+		reassignment?: {
+			originalNoiseCount: number;
+			reassignedCount: number;
 		};
 	};
 	clusters: Array<{
@@ -80,6 +87,7 @@ async function main() {
 Usage: TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts [options]
 
 Options:
+  --config <path>   Custom clustering config JSON
   --output <path>   Output file (default: outputs/vault-clusters-v2.json)
   --help, -h        Show help
 
@@ -87,12 +95,19 @@ Environment:
   TEST_VAULT_PATH   Required. Path to the Obsidian vault to test with.
   OPENAI_API_KEY    Required for embedding
 
+Config format:
+  {
+    "umap": { "nNeighbors": 5, "minDist": 0.05, ... },
+    "hdbscan": { "minClusterSize": 30, "minSamples": 1 },
+    "noiseReassign": { "enabled": true, "threshold": 0.5 }
+  }
+
 Caching:
   Embeddings are cached in <output-dir>/.embedding-cache/ to avoid redundant API calls.
   The cache is content-hash based, so only modified notes are re-embedded.
 
 Example:
-  TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=sk-xxx npx tsx scripts/run-clustering.ts
+  TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=sk-xxx npx tsx scripts/run-clustering.ts --config config.json
 `);
 		process.exit(0);
 	}
@@ -100,7 +115,32 @@ Example:
 	// Get vault path from environment
 	const resolvedVaultPath = requireTestVaultPath();
 
+	const configPath = getArg(args, '--config');
 	const outputPath = getArg(args, '--output') ?? 'outputs/vault-clusters-v2.json';
+
+	// Load config
+	let config: ClusteringConfig = {...DEFAULT_CLUSTERING_CONFIG};
+
+	if (configPath && existsSync(configPath)) {
+		const customConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
+
+		// Handle legacy 'reassign' field by converting to 'noiseReassign'
+		if (customConfig.reassign && !customConfig.noiseReassign) {
+			customConfig.noiseReassign = customConfig.reassign;
+			delete customConfig.reassign;
+		}
+
+		config = {...DEFAULT_CLUSTERING_CONFIG, ...customConfig};
+		if (customConfig.umap) {
+			config.umap = {...DEFAULT_CLUSTERING_CONFIG.umap, ...customConfig.umap};
+		}
+		if (customConfig.hdbscan) {
+			config.hdbscan = {...DEFAULT_CLUSTERING_CONFIG.hdbscan, ...customConfig.hdbscan};
+		}
+		if (customConfig.noiseReassign) {
+			config.noiseReassign = {...DEFAULT_CLUSTERING_CONFIG.noiseReassign, ...customConfig.noiseReassign};
+		}
+	}
 
 	const apiKey = process.env.OPENAI_API_KEY;
 	if (!apiKey) {
@@ -110,6 +150,10 @@ Example:
 
 	console.error(`=== Clustering V2 Pipeline ===`);
 	console.error(`Vault: ${resolvedVaultPath}`);
+	console.error(`Config: ${configPath ?? 'default'}`);
+	if (config.noiseReassign.enabled) {
+		console.error(`Noise reassign: enabled, threshold=${config.noiseReassign.threshold}`);
+	}
 	console.error('');
 
 	const totalStartTime = Date.now();
@@ -165,25 +209,35 @@ Example:
 	}
 	console.error('');
 
-	// Step 3: Run clustering
+	// Step 3: Run clustering pipeline (includes optional noise reassignment)
 	console.error('Step 3: Clustering (UMAP + HDBSCAN)...');
 	const clusteringStartTime = Date.now();
 
-	const pipeline = new ClusteringPipeline();
+	const pipeline = new ClusteringPipeline(config);
 	const clusteringResult = await pipeline.run({
 		embeddedNotes: embeddingResult.notes,
 		noteTags,
 		resolvedLinks,
 		files,
 		previousState: null,
+		config,
 	});
 
 	const clusteringMs = Date.now() - clusteringStartTime;
-	console.error(`Clustering complete: ${clusteringResult.result.clusters.length} clusters found`);
-	console.error(`Noise notes: ${clusteringResult.result.noiseNotes.length}`);
+
+	// Log results
+	const {clusters, noiseNotes, stats} = clusteringResult.result;
+	if (stats.reassignment) {
+		console.error(`  Initial noise: ${stats.reassignment.originalNoiseCount} (${(stats.reassignment.originalNoiseCount / embeddingResult.notes.length * 100).toFixed(1)}%)`);
+		console.error(`  Reassigned: ${stats.reassignment.reassignedCount} notes`);
+		console.error(`  Final noise: ${noiseNotes.length} (${(noiseNotes.length / embeddingResult.notes.length * 100).toFixed(1)}%)`);
+	} else {
+		console.error(`  Noise notes: ${noiseNotes.length} (${(noiseNotes.length / embeddingResult.notes.length * 100).toFixed(1)}%)`);
+	}
+	console.error(`  Clusters: ${clusters.length}`);
 	console.error('');
 
-	// Build output
+	// Build embedding map for output
 	const embeddingMap = new Map<string, number[]>();
 	for (const note of embeddingResult.notes) {
 		embeddingMap.set(note.notePath, note.embedding);
@@ -192,14 +246,13 @@ Example:
 	const output: ClusteringOutput = {
 		stats: {
 			totalNotes: files.size + stubs.length,
-			clusteredNotes: clusteringResult.result.clusters.reduce((sum, c) => sum + c.noteIds.length, 0),
-			noiseNotes: clusteringResult.result.noiseNotes.length,
+			clusteredNotes: clusters.reduce((sum, c) => sum + c.noteIds.length, 0),
+			noiseNotes: noiseNotes.length,
 			stubNotes: stubs.length,
-			clusterCount: clusteringResult.result.clusters.length,
+			clusterCount: clusters.length,
 			avgClusterSize:
-				clusteringResult.result.clusters.length > 0
-					? clusteringResult.result.clusters.reduce((sum, c) => sum + c.noteIds.length, 0) /
-						clusteringResult.result.clusters.length
+				clusters.length > 0
+					? clusters.reduce((sum, c) => sum + c.noteIds.length, 0) / clusters.length
 					: 0,
 			embeddingDimensions: provider.getDimensions(),
 			umapDimensions: 10,
@@ -209,16 +262,16 @@ Example:
 				tokensProcessed: embeddingResult.stats.tokensProcessed,
 				estimatedCost: embeddingResult.stats.estimatedCost,
 			},
+			...(stats.reassignment && {reassignment: stats.reassignment}),
 		},
-		clusters: clusteringResult.result.clusters.map((cluster) => ({
+		clusters: clusters.map((cluster) => ({
 			id: cluster.id,
 			noteIds: cluster.noteIds,
 			noteCount: cluster.noteIds.length,
 			representativeNotes: cluster.representativeNotes.map((notePath) => {
 				const embedding = embeddingMap.get(notePath);
-				const distance = embedding && cluster.centroid
-					? 1 - cosineSimilarity(embedding, cluster.centroid)
-					: 0;
+				const distance =
+					embedding && cluster.centroid ? 1 - cosineSimilarity(embedding, cluster.centroid) : 0;
 				return {
 					path: notePath,
 					title: files.get(notePath)?.basename ?? basename(notePath, '.md'),
@@ -230,7 +283,7 @@ Example:
 			folderPath: cluster.folderPath,
 			internalLinkDensity: cluster.internalLinkDensity,
 		})),
-		noiseNotes: clusteringResult.result.noiseNotes,
+		noiseNotes,
 		stubs,
 		timing: {
 			embeddingMs,

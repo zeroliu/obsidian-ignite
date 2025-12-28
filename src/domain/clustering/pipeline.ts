@@ -4,6 +4,7 @@ import type { FileInfo } from '@/ports/IVaultProvider';
 import { computeCentroid, selectRepresentatives } from './centroidCalculator';
 import { HDBSCANClusterer } from './hdbscanClusterer';
 import { applyIncrementalUpdate, detectChanges, updateClusteringState } from './incrementalUpdater';
+import { reassignNoiseNotes } from './noiseReassigner';
 import {
   type ClusteringConfig,
   type ClusteringResult,
@@ -95,7 +96,7 @@ export class ClusteringPipeline {
   }
 
   /**
-   * Run full clustering (UMAP → HDBSCAN → build clusters)
+   * Run full clustering (UMAP → HDBSCAN → build clusters → optional noise reassignment)
    */
   private async runFull(
     input: PipelineInput,
@@ -122,7 +123,7 @@ export class ClusteringPipeline {
     }
 
     // Step 4: Build clusters
-    const clusters = this.buildClusters(
+    let clusters = this.buildClusters(
       notePaths,
       hdbscanResult.labels,
       originalEmbeddingMap,
@@ -133,7 +134,22 @@ export class ClusteringPipeline {
     );
 
     // Collect noise notes
-    const noiseNotes = hdbscanResult.noiseIndices.map((i) => notePaths[i]);
+    let noiseNotes = hdbscanResult.noiseIndices.map((i) => notePaths[i]);
+    const originalNoiseCount = noiseNotes.length;
+    let reassignedCount = 0;
+
+    // Step 5: Optional noise reassignment
+    if (config.noiseReassign.enabled && clusters.length > 0 && noiseNotes.length > 0) {
+      const reassignResult = reassignNoiseNotes(
+        clusters,
+        noiseNotes,
+        originalEmbeddingMap,
+        config.noiseReassign.threshold,
+      );
+      clusters = reassignResult.clusters;
+      noiseNotes = reassignResult.remainingNoise;
+      reassignedCount = reassignResult.reassignedCount;
+    }
 
     // Build state for future incremental updates
     const state = updateClusteringState(noteHashes, clusters);
@@ -147,6 +163,12 @@ export class ClusteringPipeline {
           clusterCount: clusters.length,
           noiseCount: noiseNotes.length,
           wasIncremental: false,
+          ...(config.noiseReassign.enabled && {
+            reassignment: {
+              originalNoiseCount,
+              reassignedCount,
+            },
+          }),
         },
       },
       state,
