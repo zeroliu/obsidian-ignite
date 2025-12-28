@@ -5,9 +5,9 @@ export type {
 	HDBSCANConfig,
 	ClusterAssignment,
 	EmbeddingCluster,
-	ClusteringV2Config,
-	ClusteringV2Input,
-	ClusteringV2Result,
+	ClusteringConfig,
+	ClusteringInput,
+	ClusteringResult,
 	ClusteringState,
 } from './types';
 
@@ -16,7 +16,7 @@ export {
 	generateClusterId,
 	DEFAULT_UMAP_CONFIG,
 	DEFAULT_HDBSCAN_CONFIG,
-	DEFAULT_CLUSTERING_V2_CONFIG,
+	DEFAULT_CLUSTERING_CONFIG,
 	toLegacyCluster,
 	generateEmbeddingClusterId,
 } from './types';
@@ -54,5 +54,5 @@ export type {
 } from './incrementalUpdater';
 
 // Pipeline
-export { ClusteringV2Pipeline, runClusteringV2Pipeline } from './pipeline';
+export { ClusteringPipeline, runClusteringPipeline } from './pipeline';
 export type { PipelineInput, PipelineResult } from './pipeline';

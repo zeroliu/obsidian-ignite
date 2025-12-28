@@ -3,7 +3,7 @@
  * Run embedding-based clustering (V2) on a vault
  *
  * Usage:
- *   OPENAI_API_KEY=xxx npx tsx scripts/run-clustering-v2.ts ~/path/to/vault [options]
+ *   OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts ~/path/to/vault [options]
  *
  * Options:
  *   --output <path>   Output file (default: outputs/vault-clusters-v2.json)
@@ -14,13 +14,13 @@ import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
 import {basename, dirname, resolve} from 'node:path';
 import {OpenAIEmbeddingAdapter} from '../src/adapters/openai/OpenAIEmbeddingAdapter';
 import {EmbeddingOrchestrator} from '../src/domain/embedding/embedBatch';
-import {ClusteringV2Pipeline} from '../src/domain/clustering-v2/pipeline';
-import {cosineSimilarity} from '../src/domain/clustering-v2/centroidCalculator';
+import {ClusteringPipeline} from '../src/domain/clustering/pipeline';
+import {cosineSimilarity} from '../src/domain/clustering/centroidCalculator';
 import {getArg, readVault} from './lib/vault-helpers';
 
 // ============ Types ============
 
-interface ClusteringV2Output {
+interface ClusteringOutput {
 	stats: {
 		totalNotes: number;
 		clusteredNotes: number;
@@ -66,7 +66,7 @@ async function main() {
 
 	if (args.includes('--help') || args.includes('-h')) {
 		console.log(`
-Usage: OPENAI_API_KEY=xxx npx tsx scripts/run-clustering-v2.ts ~/path/to/vault [options]
+Usage: OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts ~/path/to/vault [options]
 
 Options:
   --output <path>   Output file (default: outputs/vault-clusters-v2.json)
@@ -76,7 +76,7 @@ Environment:
   OPENAI_API_KEY    Required for embedding
 
 Example:
-  OPENAI_API_KEY=sk-xxx npx tsx scripts/run-clustering-v2.ts ~/Documents/MyVault
+  OPENAI_API_KEY=sk-xxx npx tsx scripts/run-clustering.ts ~/Documents/MyVault
 `);
 		process.exit(0);
 	}
@@ -144,7 +144,7 @@ Example:
 	console.error('Step 3: Clustering (UMAP + HDBSCAN)...');
 	const clusteringStartTime = Date.now();
 
-	const pipeline = new ClusteringV2Pipeline();
+	const pipeline = new ClusteringPipeline();
 	const clusteringResult = await pipeline.run({
 		embeddedNotes: embeddingResult.notes,
 		noteTags,
@@ -164,7 +164,7 @@ Example:
 		embeddingMap.set(note.notePath, note.embedding);
 	}
 
-	const output: ClusteringV2Output = {
+	const output: ClusteringOutput = {
 		stats: {
 			totalNotes: files.size + stubs.length,
 			clusteredNotes: clusteringResult.result.clusters.reduce((sum, c) => sum + c.noteIds.length, 0),

@@ -1,4 +1,4 @@
-import type { Cluster } from '@/domain/clustering-v2/types';
+import type { Cluster } from '@/domain/clustering/types';
 import type { ILLMProvider } from '@/ports/ILLMProvider';
 import type { FileInfo } from '@/ports/IVaultProvider';
 import { batchClusterSummaries, prepareClusterSummaries } from './prepareClusterSummaries';

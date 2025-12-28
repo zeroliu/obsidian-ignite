@@ -22,10 +22,10 @@ export default class AIRecallPlugin extends Plugin {
 
 	private async runClustering(): Promise<void> {
 		// TODO: Implement full pipeline with embedding provider setup
-		// The v2 clustering pipeline requires:
+		// The clustering pipeline requires:
 		// 1. EmbeddingProvider (OpenAI or Voyage)
 		// 2. EmbeddingOrchestrator to embed notes
-		// 3. ClusteringV2Pipeline to cluster embeddings
+		// 3. ClusteringPipeline to cluster embeddings
 		// See scripts/run-full-pipeline.ts for reference implementation
 		new Notice('Clustering requires embedding API setup. See plugin settings.');
 	}

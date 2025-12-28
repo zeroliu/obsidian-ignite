@@ -25,7 +25,7 @@ export interface Cluster {
  */
 export function createCluster(partial: Partial<Cluster> & { noteIds: string[] }): Cluster {
 	return {
-		id: partial.id ?? `cluster-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+		id: partial.id ?? generateClusterId(),
 		candidateNames: partial.candidateNames ?? [],
 		noteIds: partial.noteIds,
 		dominantTags: partial.dominantTags ?? [],
@@ -109,9 +109,9 @@ export interface EmbeddingCluster extends Cluster {
 }
 
 /**
- * Configuration for the clustering-v2 pipeline
+ * Configuration for the clustering pipeline
  */
-export interface ClusteringV2Config {
+export interface ClusteringConfig {
 	/** UMAP configuration */
 	umap: UMAPConfig;
 	/** HDBSCAN configuration */
@@ -129,9 +129,9 @@ export interface ClusteringV2Config {
 }
 
 /**
- * Default clustering-v2 configuration
+ * Default clustering configuration
  */
-export const DEFAULT_CLUSTERING_V2_CONFIG: ClusteringV2Config = {
+export const DEFAULT_CLUSTERING_CONFIG: ClusteringConfig = {
 	umap: DEFAULT_UMAP_CONFIG,
 	hdbscan: DEFAULT_HDBSCAN_CONFIG,
 	incrementalThreshold: 0.05,
@@ -142,9 +142,9 @@ export const DEFAULT_CLUSTERING_V2_CONFIG: ClusteringV2Config = {
 };
 
 /**
- * Input for the clustering-v2 pipeline
+ * Input for the clustering pipeline
  */
-export interface ClusteringV2Input {
+export interface ClusteringInput {
 	/** Embedded notes with their vectors */
 	embeddings: Array<{
 		notePath: string;
@@ -155,13 +155,13 @@ export interface ClusteringV2Input {
 	/** Links for each note (for link density) */
 	noteLinks: Map<string, string[]>;
 	/** Configuration */
-	config: ClusteringV2Config;
+	config: ClusteringConfig;
 }
 
 /**
- * Result of the clustering-v2 pipeline
+ * Result of the clustering pipeline
  */
-export interface ClusteringV2Result {
+export interface ClusteringResult {
 	/** Embedding-based clusters */
 	clusters: EmbeddingCluster[];
 	/** Notes that couldn't be clustered (noise) */

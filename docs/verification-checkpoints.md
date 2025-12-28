@@ -93,7 +93,7 @@ VOYAGE_API_KEY=xxx npx tsx scripts/test-embedding-provider.ts ~/Documents/MyVaul
 
 **Artifact:** `outputs/vault-clusters-v2.json`
 
-**Script:** `scripts/run-clustering-v2.ts`
+**Script:** `scripts/run-clustering.ts`
 
 ```typescript
 interface ClusteringV2Output {
@@ -128,10 +128,10 @@ interface ClusteringV2Output {
 **Commands:**
 ```bash
 # Unit tests
-npm run test -- src/domain/clustering-v2/
+npm run test -- src/domain/clustering/
 
 # Run on vault
-OPENAI_API_KEY=xxx npx tsx scripts/run-clustering-v2.ts ~/Documents/MyVault
+OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts ~/Documents/MyVault
 ```
 
 **Pass Criteria:**
@@ -254,7 +254,7 @@ npm run test -- src/domain/evolution/
 cp outputs/vault-clusters-v2.json outputs/vault-clusters-v2-baseline.json
 
 # 2. Modify vault (add/edit/delete some notes), re-cluster
-OPENAI_API_KEY=xxx npx tsx scripts/run-clustering-v2.ts ~/Documents/MyVault
+OPENAI_API_KEY=xxx npx tsx scripts/run-clustering.ts ~/Documents/MyVault
 mv outputs/vault-clusters-v2.json outputs/vault-clusters-v2-modified.json
 
 # 3. Detect evolution
@@ -317,7 +317,7 @@ OPENAI_API_KEY=xxx ANTHROPIC_API_KEY=xxx npx tsx scripts/run-full-pipeline.ts ~/
 - [ ] Full pipeline completes without error
 - [ ] Legacy cleanup verified:
   - `src/domain/clustering/` removed (except utilities)
-  - `clustering-v2/` renamed to `clustering/`
+  - `clustering-v2/` renamed to `clustering/` (completed)
   - All imports updated
 
 ---
@@ -328,7 +328,7 @@ OPENAI_API_KEY=xxx ANTHROPIC_API_KEY=xxx npx tsx scripts/run-full-pipeline.ts ~/
 |------------|------------|----------|--------------|
 | 1 | M1-M4 | test pass | `npm test -- src/domain/embedding/` |
 | 2 | M5-M6 | `embedding-provider-test.json` | `test-embedding-provider.ts` |
-| 3 | M7-M10 | `vault-clusters-v2.json` | `run-clustering-v2.ts` |
+| 3 | M7-M10 | `vault-clusters-v2.json` | `run-clustering.ts` |
 | 4 | M11 | `vault-concepts-v2.json` | `refine-clusters-llm.ts` |
 | 5 | M12 | `evolution-test.json` | `test-evolution.ts` |
 | 6 | M13 | clean build | `npm run build` |
@@ -340,7 +340,7 @@ OPENAI_API_KEY=xxx ANTHROPIC_API_KEY=xxx npx tsx scripts/run-full-pipeline.ts ~/
 | Script | Purpose | Inputs | Outputs |
 |--------|---------|--------|---------|
 | `test-embedding-provider.ts` | Test real embedding APIs | vault path, provider, limit | `embedding-provider-test.json` |
-| `run-clustering-v2.ts` | Run embedding-based clustering | vault path | `vault-clusters-v2.json` |
+| `run-clustering.ts` | Run embedding-based clustering | vault path | `vault-clusters-v2.json` |
 | `test-evolution.ts` | Test cluster evolution detection | old/new clusters, concepts | `evolution-test.json` |
 | `run-full-pipeline.ts` | End-to-end pipeline | vault path | `full-pipeline-run.json` |
 

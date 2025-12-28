@@ -1,4 +1,4 @@
-import type { Cluster } from '@/domain/clustering-v2/types';
+import type { Cluster } from '@/domain/clustering/types';
 import type { FileInfo } from '@/ports/IVaultProvider';
 import type { ClusterSummary } from './types';
 

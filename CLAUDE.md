@@ -38,18 +38,24 @@ The codebase uses a hexagonal architecture to decouple domain logic from Obsidia
 
 - **Domain** (`src/domain/`): Pure business logic with no Obsidian dependencies
 
-### Clustering Pipeline
+### Embedding-Based Clustering Pipeline
 
-The `src/domain/clustering/` module clusters notes through a multi-step pipeline:
+The `src/domain/clustering/` module clusters notes using semantic embeddings:
 
-1. `clusterByFolder` - Initial grouping by folder structure
-2. `refineByTags` - Refine clusters by dominant tags
-3. `analyzeLinks` - Calculate internal link density
-4. `mergeRelatedClusters` - Merge clusters with high link overlap
-5. `groupByTitleKeywords` - Further refine by title keywords (supports CJK)
-6. `normalizeClusterSizes` - Split large clusters, merge small ones
+1. **Embedding Generation** - Notes are embedded using OpenAI or Voyage embedding APIs
+2. **UMAP Dimensionality Reduction** - High-dimensional embeddings are reduced to ~10 dimensions
+3. **HDBSCAN Clustering** - Density-based clustering identifies semantic groups
+4. **Incremental Updates** - New notes are assigned to existing clusters via cosine similarity
 
-Run the full pipeline via `runClusteringPipeline()` from `src/domain/clustering/pipeline.ts`.
+Run the full pipeline via `ClusteringV2Pipeline` from `src/domain/clustering/pipeline.ts`.
+
+### LLM Pipeline
+
+The `src/domain/llm/` module refines clusters into quizzable concepts:
+
+1. **Naming** - LLM assigns descriptive names to clusters
+2. **Refinement** - Clusters are merged/split based on semantic similarity
+3. **Quizzability Scoring** - Concepts are scored for spaced repetition suitability
 
 ### Testing
 

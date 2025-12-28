@@ -5,7 +5,7 @@
  * Uses Jaccard similarity to match old clusters to new clusters.
  */
 
-import type { Cluster } from '@/domain/clustering-v2/types';
+import type { Cluster } from '@/domain/clustering/types';
 import { jaccard } from './jaccardSimilarity';
 import type { ClusterEvolution, EvolutionConfig, EvolutionType } from './types';
 import { DEFAULT_EVOLUTION_CONFIG } from './types';

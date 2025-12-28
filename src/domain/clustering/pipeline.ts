@@ -5,10 +5,10 @@ import { computeCentroid, selectRepresentatives } from './centroidCalculator';
 import { HDBSCANClusterer } from './hdbscanClusterer';
 import { applyIncrementalUpdate, detectChanges, updateClusteringState } from './incrementalUpdater';
 import {
+	type ClusteringConfig,
+	type ClusteringResult,
 	type ClusteringState,
-	type ClusteringV2Config,
-	type ClusteringV2Result,
-	DEFAULT_CLUSTERING_V2_CONFIG,
+	DEFAULT_CLUSTERING_CONFIG,
 	type EmbeddingCluster,
 	generateEmbeddingClusterId,
 } from './types';
@@ -29,7 +29,7 @@ export interface PipelineInput {
 	/** Previous clustering state for incremental updates */
 	previousState: ClusteringState | null;
 	/** Configuration */
-	config?: Partial<ClusteringV2Config>;
+	config?: Partial<ClusteringConfig>;
 }
 
 /**
@@ -37,7 +37,7 @@ export interface PipelineInput {
  */
 export interface PipelineResult {
 	/** Clustering result with clusters and stats */
-	result: ClusteringV2Result;
+	result: ClusteringResult;
 	/** Updated clustering state for future runs */
 	state: ClusteringState;
 }
@@ -53,13 +53,13 @@ export interface PipelineResult {
  *
  * Supports both full and incremental modes based on change detection.
  */
-export class ClusteringV2Pipeline {
-	private config: ClusteringV2Config;
+export class ClusteringPipeline {
+	private config: ClusteringConfig;
 	private umapReducer: UMAPReducer;
 	private hdbscanClusterer: HDBSCANClusterer;
 
-	constructor(config: Partial<ClusteringV2Config> = {}) {
-		this.config = { ...DEFAULT_CLUSTERING_V2_CONFIG, ...config };
+	constructor(config: Partial<ClusteringConfig> = {}) {
+		this.config = { ...DEFAULT_CLUSTERING_CONFIG, ...config };
 		this.umapReducer = new UMAPReducer(this.config.umap);
 		this.hdbscanClusterer = new HDBSCANClusterer(this.config.hdbscan);
 	}
@@ -100,7 +100,7 @@ export class ClusteringV2Pipeline {
 	private async runFull(
 		input: PipelineInput,
 		noteHashes: Map<string, string>,
-		config: ClusteringV2Config,
+		config: ClusteringConfig,
 	): Promise<PipelineResult> {
 		// Prepare embeddings for UMAP
 		const embeddings = input.embeddedNotes.map((note) => ({
@@ -160,7 +160,7 @@ export class ClusteringV2Pipeline {
 		input: PipelineInput,
 		changes: ReturnType<typeof detectChanges>,
 		noteHashes: Map<string, string>,
-		config: ClusteringV2Config,
+		config: ClusteringConfig,
 	): Promise<PipelineResult> {
 		if (!input.previousState) {
 			throw new Error('Cannot run incremental without previous state');
@@ -214,7 +214,7 @@ export class ClusteringV2Pipeline {
 		noteTags: Map<string, string[]>,
 		resolvedLinks: ResolvedLinks,
 		files: Map<string, FileInfo>,
-		config: ClusteringV2Config,
+		config: ClusteringConfig,
 	): EmbeddingCluster[] {
 		// Group notes by cluster label
 		const clusterNotes = new Map<number, string[]>();
@@ -429,7 +429,7 @@ export class ClusteringV2Pipeline {
 	/**
 	 * Get current configuration
 	 */
-	getConfig(): ClusteringV2Config {
+	getConfig(): ClusteringConfig {
 		return { ...this.config };
 	}
 }
@@ -437,7 +437,7 @@ export class ClusteringV2Pipeline {
 /**
  * Convenience function to run clustering in one call
  */
-export async function runClusteringV2Pipeline(input: PipelineInput): Promise<PipelineResult> {
-	const pipeline = new ClusteringV2Pipeline(input.config);
+export async function runClusteringPipeline(input: PipelineInput): Promise<PipelineResult> {
+	const pipeline = new ClusteringPipeline(input.config);
 	return pipeline.run(input);
 }
