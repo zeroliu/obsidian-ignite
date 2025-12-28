@@ -70,6 +70,11 @@ Check if package.json exists and run install if so:
 npm install
 ```
 
+Copy .env file from the original directory if it exists:
+```bash
+cp <original-directory>/.env .env 2>/dev/null || true
+```
+
 ### 6. Restore Stashed Changes
 
 If changes were stashed in step 2, restore them in the **original** directory:
