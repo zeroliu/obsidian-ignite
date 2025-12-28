@@ -147,6 +147,60 @@ describe('detectEvolution', () => {
 			// 4/5 = 0.8, which is < 0.9, so it should be remap
 			expect(result.evolutions[0].type).toBe('remap');
 		});
+
+		describe('tiebreaker logic', () => {
+			it('should use alphabetical ID as tiebreaker when scores and sizes are equal', () => {
+				// Old: [shared] (1 note)
+				// new-b: [shared, x] -> Jaccard = 1/2
+				// new-a: [shared, y] -> Jaccard = 1/2 (equal score, equal size)
+				const oldClusters = [createCluster('old-1', ['shared'])];
+				const newClusters = [
+					createCluster('new-b', ['shared', 'x']),
+					createCluster('new-a', ['shared', 'y']),
+				];
+
+				const result = detectEvolution(oldClusters, newClusters);
+
+				// With equal scores and equal sizes, should prefer alphabetically earlier ID
+				expect(result.evolutions[0].newClusterId).toBe('new-a');
+			});
+
+			it('should prefer identical clusters with alphabetical tiebreaker', () => {
+				// Two clusters with identical content -> Jaccard = 1.0 for both
+				const oldClusters = [createCluster('old-1', ['a', 'b'])];
+				const newClusters = [
+					createCluster('new-z', ['a', 'b']),
+					createCluster('new-a', ['a', 'b']),
+				];
+
+				const result = detectEvolution(oldClusters, newClusters);
+
+				// Same score (1.0), same size (2) -> alphabetical wins
+				expect(result.evolutions[0].newClusterId).toBe('new-a');
+			});
+
+			it('should produce deterministic results regardless of input order', () => {
+				const oldClusters = [createCluster('old-1', ['shared'])];
+
+				// Test with different orderings of the same clusters
+				const newClustersOrder1 = [
+					createCluster('new-b', ['shared', 'x']),
+					createCluster('new-a', ['shared', 'y']),
+				];
+
+				const newClustersOrder2 = [
+					createCluster('new-a', ['shared', 'y']),
+					createCluster('new-b', ['shared', 'x']),
+				];
+
+				const result1 = detectEvolution(oldClusters, newClustersOrder1);
+				const result2 = detectEvolution(oldClusters, newClustersOrder2);
+
+				// Both should pick the same cluster regardless of input order
+				expect(result1.evolutions[0].newClusterId).toBe(result2.evolutions[0].newClusterId);
+				expect(result1.evolutions[0].newClusterId).toBe('new-a');
+			});
+		});
 	});
 
 	describe('findEvolutionForCluster', () => {

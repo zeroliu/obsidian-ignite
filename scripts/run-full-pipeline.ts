@@ -10,17 +10,16 @@
  *   --help, -h        Show help
  */
 
-import {existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
-import {basename, dirname, join, resolve} from 'node:path';
+import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
+import {dirname, resolve} from 'node:path';
 import {OpenAIEmbeddingAdapter} from '../src/adapters/openai/OpenAIEmbeddingAdapter';
 import {AnthropicLLMAdapter} from '../src/adapters/anthropic/AnthropicLLMAdapter';
 import {EmbeddingOrchestrator} from '../src/domain/embedding/embedBatch';
 import {ClusteringV2Pipeline} from '../src/domain/clustering-v2/pipeline';
 import {runLLMPipeline} from '../src/domain/llm/pipeline';
-import type {FileInfo} from '../src/ports/IVaultProvider';
-import type {ResolvedLinks} from '../src/ports/IMetadataProvider';
 import type {Cluster} from '../src/domain/clustering/types';
 import type {TrackedConcept, MisfitNote} from '../src/domain/llm/types';
+import {getArg, readVault} from './lib/vault-helpers';
 
 // ============ Types ============
 
@@ -36,147 +35,6 @@ interface FullPipelineOutput {
 		misfitNotes: MisfitNote[];
 	};
 	totalDurationMs: number;
-}
-
-// ============ Helpers ============
-
-function findMarkdownFiles(dir: string, baseDir: string = dir): string[] {
-	const files: string[] = [];
-	const entries = readdirSync(dir, {withFileTypes: true});
-
-	for (const entry of entries) {
-		const fullPath = join(dir, entry.name);
-
-		if (entry.name.startsWith('.') || entry.name === 'node_modules') {
-			continue;
-		}
-
-		if (entry.isDirectory()) {
-			files.push(...findMarkdownFiles(fullPath, baseDir));
-		} else if (entry.isFile() && entry.name.endsWith('.md')) {
-			files.push(fullPath);
-		}
-	}
-
-	return files;
-}
-
-function parseFrontmatter(content: string): Record<string, unknown> {
-	const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
-	if (!match) return {};
-
-	const yamlContent = match[1];
-	const frontmatter: Record<string, unknown> = {};
-	const lines = yamlContent.split('\n');
-
-	for (const line of lines) {
-		const colonIndex = line.indexOf(':');
-		if (colonIndex > 0) {
-			const key = line.slice(0, colonIndex).trim();
-			const value = line.slice(colonIndex + 1).trim();
-			if (value.startsWith('[') && value.endsWith(']')) {
-				frontmatter[key] = value
-					.slice(1, -1)
-					.split(',')
-					.map((s) => s.trim().replace(/^["']|["']$/g, ''))
-					.filter(Boolean);
-			} else {
-				frontmatter[key] = value.replace(/^["']|["']$/g, '');
-			}
-		}
-	}
-
-	return frontmatter;
-}
-
-function extractTags(content: string, frontmatter: Record<string, unknown>): string[] {
-	const tags = new Set<string>();
-
-	if (frontmatter.tags) {
-		const fmTags = Array.isArray(frontmatter.tags) ? frontmatter.tags : [frontmatter.tags];
-		for (const tag of fmTags) {
-			const normalized = String(tag).startsWith('#') ? String(tag) : `#${String(tag)}`;
-			tags.add(normalized);
-		}
-	}
-
-	const withoutCode = content.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '');
-	const inlineTagRegex = /(?<![`\w])#([a-zA-Z][a-zA-Z0-9_/-]*)/g;
-	let match: RegExpExecArray | null;
-	while ((match = inlineTagRegex.exec(withoutCode)) !== null) {
-		tags.add(`#${match[1]}`);
-	}
-
-	return Array.from(tags);
-}
-
-function extractLinks(content: string): string[] {
-	const links = new Set<string>();
-	const wikiLinkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
-
-	let match: RegExpExecArray | null;
-	while ((match = wikiLinkRegex.exec(content)) !== null) {
-		let link = match[1].trim();
-		const hashIndex = link.indexOf('#');
-		if (hashIndex > 0) link = link.slice(0, hashIndex);
-		else if (hashIndex === 0) continue;
-		if (link) links.add(link);
-	}
-
-	return Array.from(links);
-}
-
-function buildResolvedLinks(files: string[], linksMap: Map<string, string[]>): ResolvedLinks {
-	const resolvedLinks: ResolvedLinks = {};
-
-	const basenameToPath: Record<string, string> = {};
-	for (const filePath of files) {
-		const name = basename(filePath, '.md');
-		if (!basenameToPath[name] || filePath.length < basenameToPath[name].length) {
-			basenameToPath[name] = filePath;
-		}
-	}
-
-	for (const filePath of files) {
-		const links = linksMap.get(filePath) || [];
-		if (links.length === 0) continue;
-
-		const linkCounts: Record<string, number> = {};
-
-		for (const link of links) {
-			let resolved: string | null = null;
-			if (files.includes(link) || files.includes(`${link}.md`)) {
-				resolved = files.includes(link) ? link : `${link}.md`;
-			} else {
-				resolved = basenameToPath[link] || null;
-			}
-
-			if (resolved) {
-				linkCounts[resolved] = (linkCounts[resolved] || 0) + 1;
-			}
-		}
-
-		if (Object.keys(linkCounts).length > 0) {
-			resolvedLinks[filePath] = linkCounts;
-		}
-	}
-
-	return resolvedLinks;
-}
-
-function isStubNote(content: string): boolean {
-	const withoutFrontmatter = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
-	const withoutCode = withoutFrontmatter.replace(/```[\s\S]*?```/g, '');
-	const words = withoutCode.split(/\s+/).filter((w) => w.length > 0);
-	return words.length < 50;
-}
-
-function getArg(args: string[], name: string): string | undefined {
-	const index = args.indexOf(name);
-	if (index !== -1 && args[index + 1]) {
-		return args[index + 1];
-	}
-	return undefined;
 }
 
 // ============ Main ============
@@ -249,39 +107,8 @@ Example:
 	console.error('Stage 1: Reading vault...');
 	const vaultStartTime = Date.now();
 
-	const allFilePaths = findMarkdownFiles(resolvedVaultPath);
-	const files: Map<string, FileInfo> = new Map();
-	const contents: Map<string, string> = new Map();
-	const noteTags: Map<string, string[]> = new Map();
-	const linksMap: Map<string, string[]> = new Map();
-	const stubs: string[] = [];
-
-	for (const fullPath of allFilePaths) {
-		const relativePath = fullPath.replace(resolvedVaultPath + '/', '');
-		const content = readFileSync(fullPath, 'utf-8');
-		const stats = statSync(fullPath);
-
-		if (isStubNote(content)) {
-			stubs.push(relativePath);
-			continue;
-		}
-
-		files.set(relativePath, {
-			path: relativePath,
-			basename: basename(fullPath, '.md'),
-			folder: dirname(relativePath) === '.' ? '' : dirname(relativePath),
-			modifiedAt: stats.mtimeMs,
-			createdAt: stats.birthtimeMs,
-		});
-
-		contents.set(relativePath, content);
-		const frontmatter = parseFrontmatter(content);
-		noteTags.set(relativePath, extractTags(content, frontmatter));
-		linksMap.set(relativePath, extractLinks(content));
-	}
-
-	const relativePaths = Array.from(files.keys());
-	const resolvedLinks = buildResolvedLinks(relativePaths, linksMap);
+	const vault = readVault(resolvedVaultPath);
+	const {files, contents, noteTags, resolvedLinks, stubs} = vault;
 
 	output.stages.vaultRead = {
 		noteCount: files.size,

@@ -12,13 +12,14 @@
  *   --help, -h                  Show help
  */
 
-import {existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync} from 'node:fs';
-import {basename, dirname, join, resolve} from 'node:path';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {basename, dirname, resolve} from 'node:path';
 import {OpenAIEmbeddingAdapter} from '../src/adapters/openai/OpenAIEmbeddingAdapter';
 import {VoyageEmbeddingAdapter} from '../src/adapters/voyage/VoyageEmbeddingAdapter';
 import type {IEmbeddingProvider} from '../src/ports/IEmbeddingProvider';
 import {prepareTextForEmbedding} from '../src/domain/embedding/prepareText';
 import {DEFAULT_TEXT_PREPARE_CONFIG} from '../src/domain/embedding/types';
+import {findMarkdownFiles, getArg} from './lib/vault-helpers';
 
 // ============ Types ============
 
@@ -42,36 +43,6 @@ interface EmbeddingTestOutput {
 }
 
 // ============ Helpers ============
-
-function findMarkdownFiles(dir: string, baseDir: string = dir): string[] {
-	const files: string[] = [];
-	const entries = readdirSync(dir, {withFileTypes: true});
-
-	for (const entry of entries) {
-		const fullPath = join(dir, entry.name);
-
-		// Skip hidden directories and common non-content folders
-		if (entry.name.startsWith('.') || entry.name === 'node_modules') {
-			continue;
-		}
-
-		if (entry.isDirectory()) {
-			files.push(...findMarkdownFiles(fullPath, baseDir));
-		} else if (entry.isFile() && entry.name.endsWith('.md')) {
-			files.push(fullPath);
-		}
-	}
-
-	return files;
-}
-
-function getArg(args: string[], name: string): string | undefined {
-	const index = args.indexOf(name);
-	if (index !== -1 && args[index + 1]) {
-		return args[index + 1];
-	}
-	return undefined;
-}
 
 function shuffleArray<T>(array: T[]): T[] {
 	const shuffled = [...array];

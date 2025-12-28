@@ -48,19 +48,32 @@ export function detectEvolution(
 	const newClusterSets = newClusters.map((cluster) => ({
 		id: cluster.id,
 		noteIdSet: new Set(cluster.noteIds),
+		noteCount: cluster.noteIds.length,
 	}));
 
 	// For each old cluster, find the best matching new cluster
 	for (const oldCluster of oldClusters) {
 		const oldNoteIdSet = new Set(oldCluster.noteIds);
 
-		let bestMatch: { id: string; score: number } | null = null;
+		let bestMatch: { id: string; score: number; noteCount: number } | null = null;
 
 		for (const newCluster of newClusterSets) {
 			const score = jaccard(oldNoteIdSet, newCluster.noteIdSet);
 
-			if (bestMatch === null || score > bestMatch.score) {
-				bestMatch = { id: newCluster.id, score };
+			// Tiebreaker logic for deterministic results:
+			// 1. Higher score wins
+			// 2. If scores equal, prefer larger cluster (more notes)
+			// 3. If still tied, prefer alphabetically earlier ID
+			const isBetterMatch =
+				bestMatch === null ||
+				score > bestMatch.score ||
+				(score === bestMatch.score && newCluster.noteCount > bestMatch.noteCount) ||
+				(score === bestMatch.score &&
+					newCluster.noteCount === bestMatch.noteCount &&
+					newCluster.id < bestMatch.id);
+
+			if (isBetterMatch) {
+				bestMatch = { id: newCluster.id, score, noteCount: newCluster.noteCount };
 			}
 		}
 
