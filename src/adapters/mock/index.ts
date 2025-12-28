@@ -9,3 +9,5 @@ export type {
 	MockLLMFixture,
 	LLMCallRecord,
 } from './MockLLMAdapter';
+export { MockEmbeddingAdapter, DEFAULT_MOCK_EMBEDDING_CONFIG } from './MockEmbeddingAdapter';
+export type { EmbeddingCallRecord } from './MockEmbeddingAdapter';
