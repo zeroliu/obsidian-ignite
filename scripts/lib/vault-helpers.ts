@@ -4,6 +4,7 @@
  * Common functions used across multiple scripts for reading and parsing vault files.
  */
 
+import 'dotenv/config';
 import {readdirSync, readFileSync, statSync} from 'node:fs';
 import {basename, dirname, join} from 'node:path';
 import type {FileInfo} from '../../src/ports/IVaultProvider';
@@ -206,6 +207,41 @@ export function getArg(args: string[], name: string): string | undefined {
 		return args[index + 1];
 	}
 	return undefined;
+}
+
+/**
+ * Get the test vault path from the TEST_VAULT_PATH environment variable.
+ * Throws an error if the environment variable is not set.
+ *
+ * @returns The resolved vault path
+ * @throws Error if TEST_VAULT_PATH is not set or the path doesn't exist
+ */
+export function requireTestVaultPath(): string {
+	const vaultPath = process.env.TEST_VAULT_PATH;
+	if (!vaultPath) {
+		console.error('Error: TEST_VAULT_PATH environment variable is required');
+		console.error('');
+		console.error('Set it to your Obsidian vault path:');
+		console.error('  export TEST_VAULT_PATH=~/Documents/MyVault');
+		console.error('');
+		console.error('Or pass it inline:');
+		console.error('  TEST_VAULT_PATH=~/Documents/MyVault npx tsx scripts/...');
+		process.exit(1);
+	}
+
+	const {resolve} = require('node:path');
+	const {existsSync} = require('node:fs');
+
+	// Expand ~ to home directory
+	const expandedPath = vaultPath.replace(/^~/, process.env.HOME || '');
+	const resolvedPath = resolve(expandedPath);
+
+	if (!existsSync(resolvedPath)) {
+		console.error(`Error: Vault path does not exist: ${resolvedPath}`);
+		process.exit(1);
+	}
+
+	return resolvedPath;
 }
 
 /**
