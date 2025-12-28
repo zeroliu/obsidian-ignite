@@ -119,7 +119,7 @@ let llmProvider: ILLMProvider;
 if (useRealApi) {
   const apiKey = process.env.ANTHROPIC_API_KEY!;
   llmProvider = new AnthropicLLMAdapter(apiKey, {
-    model: 'claude-opus-4-5-20251101',
+    model: 'claude-haiku-4-5-20251001',
     maxTokens: 8192,
     batchSize: 10,
   });
