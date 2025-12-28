@@ -252,19 +252,18 @@ describe('normalizeWhitespace', () => {
 
 describe('estimateTokens', () => {
 	it('should estimate tokens for English text', () => {
-		// ~4 chars per token
+		// ~1.5 chars per token (very conservative estimate)
 		const text = 'This is a simple test sentence.'; // 32 chars
 		const tokens = estimateTokens(text);
-		expect(tokens).toBeGreaterThanOrEqual(6);
-		expect(tokens).toBeLessThanOrEqual(12);
+		expect(tokens).toBeGreaterThanOrEqual(18);
+		expect(tokens).toBeLessThanOrEqual(25);
 	});
 
 	it('should estimate tokens for CJK text', () => {
-		// ~1.5 chars per token
+		// ~1 char per token (conservative estimate)
 		const text = '这是一个中文测试句子'; // 10 CJK chars
 		const tokens = estimateTokens(text);
-		expect(tokens).toBeGreaterThanOrEqual(5);
-		expect(tokens).toBeLessThanOrEqual(10);
+		expect(tokens).toBe(10);
 	});
 
 	it('should handle mixed content', () => {

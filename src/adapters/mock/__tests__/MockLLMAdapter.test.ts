@@ -211,7 +211,7 @@ describe('MockLLMAdapter', () => {
 	describe('config', () => {
 		it('should return default config', () => {
 			const config = adapter.getConfig();
-			expect(config.model).toBe('claude-sonnet-4-20250514');
+			expect(config.model).toBe('claude-haiku-4-5-20251001');
 			expect(config.batchSize).toBe(20);
 		});
 

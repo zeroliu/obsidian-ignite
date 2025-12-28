@@ -12,15 +12,21 @@
  * Options:
  *   --output <path>   Output file (default: outputs/vault-clusters-v2.json)
  *   --help, -h        Show help
+ *
+ * Caching:
+ *   Embeddings are cached in <output-dir>/.embedding-cache/ to avoid redundant API calls.
+ *   The cache is content-hash based, so only modified notes are re-embedded.
  */
 
 import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
-import {basename, dirname} from 'node:path';
+import {basename, dirname, join} from 'node:path';
 import {OpenAIEmbeddingAdapter} from '../src/adapters/openai/OpenAIEmbeddingAdapter';
 import {EmbeddingOrchestrator} from '../src/domain/embedding/embedBatch';
+import {EmbeddingCacheManager} from '../src/domain/embedding/cache';
 import {ClusteringPipeline} from '../src/domain/clustering/pipeline';
 import {cosineSimilarity} from '../src/domain/clustering/centroidCalculator';
 import {getArg, readVault, requireTestVaultPath} from './lib/vault-helpers';
+import {FileStorageAdapter} from './lib/file-storage';
 
 // ============ Types ============
 
@@ -43,6 +49,7 @@ interface ClusteringOutput {
 	};
 	clusters: Array<{
 		id: string;
+		noteIds: string[];
 		noteCount: number;
 		representativeNotes: Array<{
 			path: string;
@@ -80,6 +87,10 @@ Environment:
   TEST_VAULT_PATH   Required. Path to the Obsidian vault to test with.
   OPENAI_API_KEY    Required for embedding
 
+Caching:
+  Embeddings are cached in <output-dir>/.embedding-cache/ to avoid redundant API calls.
+  The cache is content-hash based, so only modified notes are re-embedded.
+
 Example:
   TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=sk-xxx npx tsx scripts/run-clustering.ts
 `);
@@ -116,8 +127,18 @@ Example:
 	console.error('Step 2: Embedding notes...');
 	const embeddingStartTime = Date.now();
 
+	// Set up file-based cache for embeddings
+	const cacheDir = join(dirname(outputPath), '.embedding-cache');
+	const storage = new FileStorageAdapter(cacheDir);
+	const cache = new EmbeddingCacheManager(storage);
+	await cache.initialize();
+
 	const provider = new OpenAIEmbeddingAdapter({apiKey});
-	const orchestrator = new EmbeddingOrchestrator(provider, null, {useCache: false});
+
+	// Check for provider/model changes (invalidates cache if changed)
+	await cache.setProviderModel(provider.getProviderName(), provider.getModelName());
+
+	const orchestrator = new EmbeddingOrchestrator(provider, cache, {useCache: true});
 
 	const notesToEmbed = Array.from(contents.entries()).map(([path, content]) => ({
 		notePath: path,
@@ -129,11 +150,19 @@ Example:
 	});
 	console.error('');
 
+	// Flush cache to persist new embeddings
+	await cache.flush();
+
 	const embeddingMs = Date.now() - embeddingStartTime;
 	console.error(
 		`Embedding complete: ${embeddingResult.notes.length} notes, ${embeddingResult.stats.tokensProcessed} tokens`,
 	);
-	console.error(`Estimated cost: $${embeddingResult.stats.estimatedCost.toFixed(6)}`);
+	console.error(
+		`Cache: ${embeddingResult.stats.cacheHits} hits, ${embeddingResult.stats.cacheMisses} misses`,
+	);
+	if (embeddingResult.stats.cacheMisses > 0) {
+		console.error(`Estimated cost (new embeddings): $${embeddingResult.stats.estimatedCost.toFixed(6)}`);
+	}
 	console.error('');
 
 	// Step 3: Run clustering
@@ -183,6 +212,7 @@ Example:
 		},
 		clusters: clusteringResult.result.clusters.map((cluster) => ({
 			id: cluster.id,
+			noteIds: cluster.noteIds,
 			noteCount: cluster.noteIds.length,
 			representativeNotes: cluster.representativeNotes.map((notePath) => {
 				const embedding = embeddingMap.get(notePath);

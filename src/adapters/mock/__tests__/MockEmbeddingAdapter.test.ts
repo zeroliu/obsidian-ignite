@@ -142,25 +142,24 @@ describe('MockEmbeddingAdapter', () => {
 
 	describe('estimateTokens', () => {
 		it('should estimate tokens for English text', () => {
-			// Roughly 4 chars per token
+			// Roughly 1.5 chars per token (conservative)
 			const text = 'This is a test sentence with multiple words';
 			const tokens = adapter.estimateTokens(text);
 
 			expect(tokens).toBeGreaterThan(0);
-			// ~44 chars / 4 = ~11 tokens
-			expect(tokens).toBeGreaterThanOrEqual(8);
-			expect(tokens).toBeLessThanOrEqual(15);
+			// ~44 chars / 1.5 = ~29 tokens
+			expect(tokens).toBeGreaterThanOrEqual(25);
+			expect(tokens).toBeLessThanOrEqual(35);
 		});
 
 		it('should estimate tokens for CJK text', () => {
-			// CJK chars are counted differently
+			// CJK chars are 1:1 with tokens (conservative)
 			const text = '这是一个中文测试';
 			const tokens = adapter.estimateTokens(text);
 
 			expect(tokens).toBeGreaterThan(0);
-			// 8 CJK chars / 1.5 = ~6 tokens
-			expect(tokens).toBeGreaterThanOrEqual(4);
-			expect(tokens).toBeLessThanOrEqual(8);
+			// 8 CJK chars at 1:1 ratio = 8 tokens
+			expect(tokens).toBe(8);
 		});
 
 		it('should handle mixed content', () => {

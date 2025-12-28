@@ -133,7 +133,7 @@ export interface LLMConfig {
  * Default LLM configuration
  */
 export const DEFAULT_LLM_CONFIG: LLMConfig = {
-	model: 'claude-sonnet-4-20250514',
+	model: 'claude-haiku-4-5-20251001',
 	maxTokens: 4096,
 	temperature: 0.3,
 	batchSize: 20,
