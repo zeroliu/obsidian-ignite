@@ -5,7 +5,7 @@ import {
 } from '@/adapters/obsidian';
 import { OpenAIEmbeddingAdapter } from '@/adapters/openai/OpenAIEmbeddingAdapter';
 import { VoyageEmbeddingAdapter } from '@/adapters/voyage/VoyageEmbeddingAdapter';
-import { PipelineOrchestrator } from '@/domain/pipeline';
+import { PipelineOrchestrator, parseExcludePatterns } from '@/domain/pipeline';
 import type { IEmbeddingProvider } from '@/ports/IEmbeddingProvider';
 import { type AIRecallSettings, AIRecallSettingsTab, DEFAULT_SETTINGS } from '@/settings';
 import { Notice, Plugin } from 'obsidian';
@@ -96,12 +96,16 @@ export default class AIRecallPlugin extends Plugin {
     const metadataAdapter = new ObsidianMetadataAdapter(this.app);
     const storageAdapter = new ObsidianStorageAdapter(this.app);
 
+    // Parse exclude patterns from settings
+    const excludePatterns = parseExcludePatterns(this.settings.excludePaths);
+
     // Create orchestrator
     const orchestrator = new PipelineOrchestrator(
       vaultAdapter,
       metadataAdapter,
       storageAdapter,
       embeddingProvider,
+      excludePatterns,
     );
 
     // Show status notice
@@ -126,8 +130,11 @@ export default class AIRecallPlugin extends Plugin {
           ? ` (est. cost: $${result.embeddingStats.estimatedCost.toFixed(4)})`
           : ' (all from cache)';
 
+      const excludedInfo =
+        result.excludedCount > 0 ? `\n${result.excludedCount} paths excluded` : '';
+
       new Notice(
-        `Clustering complete!\n${result.clusterCount} clusters found\n${result.totalNotes} notes processed\n${result.noiseCount} noise notes\nTime: ${(result.timing.totalMs / 1000).toFixed(1)}s${costInfo}`,
+        `Clustering complete!\n${result.clusterCount} clusters found\n${result.totalNotes} notes processed${excludedInfo}\n${result.noiseCount} noise notes\nTime: ${(result.timing.totalMs / 1000).toFixed(1)}s${costInfo}`,
         8000,
       );
 

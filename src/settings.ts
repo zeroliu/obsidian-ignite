@@ -11,6 +11,8 @@ export interface AIRecallSettings {
   openaiApiKey: string;
   /** Voyage AI API key for embeddings */
   voyageApiKey: string;
+  /** Paths to exclude from clustering (one glob pattern per line) */
+  excludePaths: string;
 }
 
 /**
@@ -20,6 +22,7 @@ export const DEFAULT_SETTINGS: AIRecallSettings = {
   embeddingProvider: 'openai',
   openaiApiKey: '',
   voyageApiKey: '',
+  excludePaths: '',
 };
 
 /**
@@ -104,6 +107,33 @@ export class AIRecallSettingsTab extends PluginSettingTab {
           }
         });
     }
+
+    // Exclude Paths section
+    containerEl.createEl('h3', { text: 'Path Exclusions' });
+
+    new Setting(containerEl)
+      .setName('Excluded paths')
+      .setDesc(
+        'Glob patterns for paths to exclude from clustering. One pattern per line. ' +
+          'Examples: Templates/**, **/*.template.md, Archive/**',
+      )
+      .addTextArea((text) =>
+        text
+          .setPlaceholder('Templates/**\n**/*.template.md\nArchive/**')
+          .setValue(this.plugin.settings.excludePaths)
+          .onChange(async (value) => {
+            this.plugin.settings.excludePaths = value;
+            await this.plugin.saveSettings();
+          }),
+      )
+      .then((setting) => {
+        const textareaEl = setting.controlEl.querySelector('textarea');
+        if (textareaEl) {
+          textareaEl.rows = 5;
+          textareaEl.cols = 40;
+          textareaEl.style.fontFamily = 'monospace';
+        }
+      });
 
     // Info section
     containerEl.createEl('h3', { text: 'About' });

@@ -5,6 +5,7 @@ import type { IEmbeddingProvider } from '@/ports/IEmbeddingProvider';
 import type { IMetadataProvider, ResolvedLinks } from '@/ports/IMetadataProvider';
 import type { IStorageAdapter } from '@/ports/IStorageAdapter';
 import type { FileInfo, IVaultProvider } from '@/ports/IVaultProvider';
+import { filterExcludedPaths } from './pathFilter';
 import {
   CLUSTERING_RESULT_VERSION,
   type PersistedClusteringResult,
@@ -39,6 +40,7 @@ export class PipelineOrchestrator {
     private metadataProvider: IMetadataProvider,
     private storageAdapter: IStorageAdapter,
     private embeddingProvider: IEmbeddingProvider,
+    private excludePatterns: string[] = [],
   ) {}
 
   /**
@@ -53,7 +55,8 @@ export class PipelineOrchestrator {
     // Stage 1: Reading vault
     this.reportProgress(onProgress, 'reading', 0, 1, 'Reading vault notes...');
 
-    const { files, contents, noteTags, resolvedLinks, stubCount } = await this.readVault();
+    const { files, contents, noteTags, resolvedLinks, stubCount, excludedCount } =
+      await this.readVault();
 
     const noteCount = files.size;
     this.reportProgress(
@@ -61,7 +64,7 @@ export class PipelineOrchestrator {
       'reading',
       1,
       1,
-      `Found ${noteCount} notes (${stubCount} stubs excluded)`,
+      `Found ${noteCount} notes (${stubCount} stubs, ${excludedCount} excluded)`,
     );
 
     if (noteCount === 0) {
@@ -69,6 +72,7 @@ export class PipelineOrchestrator {
         clusterCount: 0,
         totalNotes: 0,
         noiseCount: 0,
+        excludedCount,
         embeddingStats: { cacheHits: 0, cacheMisses: 0, tokensProcessed: 0, estimatedCost: 0 },
         timing: { embeddingMs: 0, clusteringMs: 0, totalMs: Date.now() - totalStartTime },
       };
@@ -150,6 +154,7 @@ export class PipelineOrchestrator {
       clusterCount: clusteringResult.result.clusters.length,
       totalNotes: noteCount,
       noiseCount: clusteringResult.result.noiseNotes.length,
+      excludedCount,
       embeddingStats: {
         cacheHits: embeddingResult.stats.cacheHits,
         cacheMisses: embeddingResult.stats.cacheMisses,
@@ -180,15 +185,22 @@ export class PipelineOrchestrator {
     noteTags: Map<string, string[]>;
     resolvedLinks: ResolvedLinks;
     stubCount: number;
+    excludedCount: number;
   }> {
     const allFiles = await this.vaultProvider.listMarkdownFiles();
+
+    // Filter excluded paths FIRST (before any other processing)
+    const { included: nonExcludedFiles, excludedCount } = filterExcludedPaths(
+      allFiles,
+      this.excludePatterns,
+    );
 
     const files = new Map<string, FileInfo>();
     const contents = new Map<string, string>();
     const noteTags = new Map<string, string[]>();
     let stubCount = 0;
 
-    for (const file of allFiles) {
+    for (const file of nonExcludedFiles) {
       const content = await this.vaultProvider.readFile(file.path);
 
       // Filter stubs
@@ -212,7 +224,7 @@ export class PipelineOrchestrator {
     // Get resolved links
     const resolvedLinks = await this.metadataProvider.getResolvedLinks();
 
-    return { files, contents, noteTags, resolvedLinks, stubCount };
+    return { files, contents, noteTags, resolvedLinks, stubCount, excludedCount };
   }
 
   /**

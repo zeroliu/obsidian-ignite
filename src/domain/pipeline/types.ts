@@ -71,6 +71,8 @@ export interface PipelineResult {
   totalNotes: number;
   /** Notes classified as noise */
   noiseCount: number;
+  /** Notes excluded by path patterns */
+  excludedCount: number;
   /** Embedding statistics */
   embeddingStats: {
     cacheHits: number;
