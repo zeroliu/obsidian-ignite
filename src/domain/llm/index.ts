@@ -1,23 +1,31 @@
 // LLM Domain Module
-// Provides concept naming and cluster refinement using LLMs
+// Provides concept naming using LLMs with integrated misfit detection
 
 // Types
 export type {
 	ClusterSummary,
 	ConceptNamingResult,
-	Concept,
-	SynonymPattern,
+	TrackedConcept,
 	MisfitNote,
 	ConceptNamingRequest,
 	ConceptNamingResponse,
-	ConceptSummary,
-	ClusterRefinementRequest,
-	ClusterRefinementResponse,
 	TokenUsage,
 	LLMConfig,
+	// Legacy types (deprecated)
+	Concept,
 } from './types';
 
-export { DEFAULT_LLM_CONFIG, createConcept, generateConceptId } from './types';
+export {
+	DEFAULT_LLM_CONFIG,
+	createTrackedConcept,
+	generateConceptId,
+	isQuizzable,
+	isQuizzableScore,
+	// Legacy helpers (deprecated)
+	createConcept,
+	toLegacyConcept,
+	fromLegacyConcept,
+} from './types';
 
 // Cluster Summary Preparation
 export {
@@ -31,21 +39,11 @@ export type { PrepareClusterSummariesConfig } from './prepareClusterSummaries';
 // Concept Naming
 export {
 	processConceptNaming,
-	applyMergeSuggestions,
 	createConceptFromResult,
 	filterQuizzableConcepts,
 	filterNonQuizzableConcepts,
 } from './processConceptNaming';
-
-// Cluster Refinements
-export {
-	applyClusterRefinements,
-	applySynonymMerges,
-	handleMisfitNotes,
-	getMisfitNoteSuggestedTags,
-	groupMisfitsByPrimaryTag,
-} from './applyClusterRefinements';
-export type { RefinementResult, RefinementStats } from './applyClusterRefinements';
+export type { ProcessNamingResult } from './processConceptNaming';
 
 // Pipeline
 export { runLLMPipeline, runConceptNamingOnly } from './pipeline';
@@ -54,9 +52,6 @@ export type { LLMPipelineInput, LLMPipelineResult, LLMPipelineStats } from './pi
 // Prompts
 export {
 	CONCEPT_NAMING_SYSTEM_PROMPT,
-	CLUSTER_REFINEMENT_SYSTEM_PROMPT,
 	buildConceptNamingPrompt,
-	buildClusterRefinementPrompt,
 	parseNamingResponse,
-	parseRefinementResponse,
 } from './prompts';

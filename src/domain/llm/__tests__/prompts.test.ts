@@ -1,26 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
 	CONCEPT_NAMING_SYSTEM_PROMPT,
-	CLUSTER_REFINEMENT_SYSTEM_PROMPT,
 	buildConceptNamingPrompt,
-	buildClusterRefinementPrompt,
 	parseNamingResponse,
-	parseRefinementResponse,
 } from '../prompts';
-import type { ClusterSummary, ConceptSummary } from '../types';
+import type { ClusterSummary } from '../types';
 
 describe('prompts', () => {
 	describe('system prompts', () => {
-		it('should have concept naming system prompt', () => {
+		it('should have concept naming system prompt with misfit detection', () => {
 			expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('concept name');
 			expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('quizzability');
+			expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('misfit');
 			expect(CONCEPT_NAMING_SYSTEM_PROMPT).toContain('JSON');
-		});
-
-		it('should have cluster refinement system prompt', () => {
-			expect(CLUSTER_REFINEMENT_SYSTEM_PROMPT).toContain('SYNONYM');
-			expect(CLUSTER_REFINEMENT_SYSTEM_PROMPT).toContain('MISFIT');
-			expect(CLUSTER_REFINEMENT_SYSTEM_PROMPT).toContain('JSON');
 		});
 	});
 
@@ -92,38 +84,42 @@ describe('prompts', () => {
 			expect(prompt).toContain('Common tags: None');
 			expect(prompt).toContain('Folder: Root');
 		});
-	});
 
-	describe('buildClusterRefinementPrompt', () => {
-		it('should build prompt with concept information', () => {
-			const concepts: ConceptSummary[] = [
+		it('should include misfitNotes in expected format', () => {
+			const clusters: ClusterSummary[] = [
 				{
-					conceptId: 'concept-1',
-					name: 'React Development',
-					sampleTitles: ['Hooks', 'State', 'Props'],
-					noteCount: 30,
+					clusterId: 'cluster-1',
+					candidateNames: ['Test'],
+					representativeTitles: [],
+					commonTags: [],
+					folderPath: '',
+					noteCount: 5,
 				},
 			];
 
-			const prompt = buildClusterRefinementPrompt(concepts);
+			const prompt = buildConceptNamingPrompt(clusters);
 
-			expect(prompt).toContain('concept-1');
-			expect(prompt).toContain('React Development');
-			expect(prompt).toContain('Hooks, State, Props');
-			expect(prompt).toContain('30');
+			expect(prompt).toContain('misfitNotes');
+			expect(prompt).toContain('noteId');
+			expect(prompt).toContain('reason');
 		});
 	});
 
 	describe('parseNamingResponse', () => {
-		it('should parse valid JSON array', () => {
+		it('should parse valid JSON array with misfitNotes', () => {
 			const response = `[
 				{
 					"clusterId": "cluster-1",
 					"canonicalName": "React Development",
 					"quizzabilityScore": 0.9,
-					"isQuizzable": true,
 					"nonQuizzableReason": null,
-					"suggestedMerges": []
+					"suggestedMerges": [],
+					"misfitNotes": [
+						{
+							"noteId": "grocery-list.md",
+							"reason": "Not programming content"
+						}
+					]
 				}
 			]`;
 
@@ -133,7 +129,9 @@ describe('prompts', () => {
 			expect(results[0].clusterId).toBe('cluster-1');
 			expect(results[0].canonicalName).toBe('React Development');
 			expect(results[0].quizzabilityScore).toBe(0.9);
-			expect(results[0].isQuizzable).toBe(true);
+			expect(results[0].misfitNotes).toHaveLength(1);
+			expect(results[0].misfitNotes[0].noteId).toBe('grocery-list.md');
+			expect(results[0].misfitNotes[0].reason).toBe('Not programming content');
 		});
 
 		it('should parse JSON from markdown code block', () => {
@@ -145,8 +143,8 @@ describe('prompts', () => {
 		"clusterId": "cluster-1",
 		"canonicalName": "Test",
 		"quizzabilityScore": 0.5,
-		"isQuizzable": true,
-		"suggestedMerges": []
+		"suggestedMerges": [],
+		"misfitNotes": []
 	}
 ]
 \`\`\`
@@ -157,6 +155,7 @@ That's all!`;
 
 			expect(results).toHaveLength(1);
 			expect(results[0].canonicalName).toBe('Test');
+			expect(results[0].misfitNotes).toEqual([]);
 		});
 
 		it('should normalize score out of range', () => {
@@ -165,8 +164,8 @@ That's all!`;
 					"clusterId": "cluster-1",
 					"canonicalName": "Test",
 					"quizzabilityScore": 1.5,
-					"isQuizzable": true,
-					"suggestedMerges": []
+					"suggestedMerges": [],
+					"misfitNotes": []
 				}
 			]`;
 
@@ -181,15 +180,15 @@ That's all!`;
 					"clusterId": "cluster-1",
 					"canonicalName": "Meeting Notes",
 					"quizzabilityScore": 0.1,
-					"isQuizzable": false,
 					"nonQuizzableReason": "Ephemeral content",
-					"suggestedMerges": []
+					"suggestedMerges": [],
+					"misfitNotes": []
 				}
 			]`;
 
 			const results = parseNamingResponse(response);
 
-			expect(results[0].isQuizzable).toBe(false);
+			expect(results[0].quizzabilityScore).toBe(0.1);
 			expect(results[0].nonQuizzableReason).toBe('Ephemeral content');
 		});
 
@@ -199,14 +198,50 @@ That's all!`;
 					"clusterId": "cluster-1",
 					"canonicalName": "JavaScript",
 					"quizzabilityScore": 0.9,
-					"isQuizzable": true,
-					"suggestedMerges": ["cluster-2", "cluster-3"]
+					"suggestedMerges": ["cluster-2", "cluster-3"],
+					"misfitNotes": []
 				}
 			]`;
 
 			const results = parseNamingResponse(response);
 
 			expect(results[0].suggestedMerges).toEqual(['cluster-2', 'cluster-3']);
+		});
+
+		it('should handle missing misfitNotes gracefully', () => {
+			const response = `[
+				{
+					"clusterId": "cluster-1",
+					"canonicalName": "Test",
+					"quizzabilityScore": 0.8,
+					"suggestedMerges": []
+				}
+			]`;
+
+			const results = parseNamingResponse(response);
+
+			expect(results[0].misfitNotes).toEqual([]);
+		});
+
+		it('should handle malformed misfitNotes gracefully', () => {
+			const response = `[
+				{
+					"clusterId": "cluster-1",
+					"canonicalName": "Test",
+					"quizzabilityScore": 0.8,
+					"suggestedMerges": [],
+					"misfitNotes": [
+						{ "invalid": "entry" },
+						{ "noteId": "valid.md", "reason": "Good reason" }
+					]
+				}
+			]`;
+
+			const results = parseNamingResponse(response);
+
+			// Should only include valid entries
+			expect(results[0].misfitNotes).toHaveLength(1);
+			expect(results[0].misfitNotes[0].noteId).toBe('valid.md');
 		});
 
 		it('should throw on invalid JSON', () => {
@@ -219,90 +254,6 @@ That's all!`;
 
 		it('should throw on missing required fields', () => {
 			expect(() => parseNamingResponse('[{"foo": "bar"}]')).toThrow('clusterId');
-		});
-	});
-
-	describe('parseRefinementResponse', () => {
-		it('should parse valid refinement response', () => {
-			const response = `{
-				"synonymPatterns": [
-					{
-						"primaryConceptId": "concept-1",
-						"aliasConceptIds": ["concept-2"],
-						"confidence": 0.95,
-						"reason": "JS is JavaScript"
-					}
-				],
-				"misfitNotes": [
-					{
-						"noteId": "note-1",
-						"noteTitle": "Grocery List",
-						"currentConceptId": "concept-3",
-						"suggestedTags": ["#personal"],
-						"confidence": 0.9,
-						"reason": "Not programming content"
-					}
-				]
-			}`;
-
-			const result = parseRefinementResponse(response);
-
-			expect(result.synonymPatterns).toHaveLength(1);
-			expect(result.synonymPatterns[0].primaryConceptId).toBe('concept-1');
-			expect(result.synonymPatterns[0].confidence).toBe(0.95);
-
-			expect(result.misfitNotes).toHaveLength(1);
-			expect(result.misfitNotes[0].noteTitle).toBe('Grocery List');
-			expect(result.misfitNotes[0].suggestedTags).toContain('#personal');
-		});
-
-		it('should handle empty arrays', () => {
-			const response = `{
-				"synonymPatterns": [],
-				"misfitNotes": []
-			}`;
-
-			const result = parseRefinementResponse(response);
-
-			expect(result.synonymPatterns).toEqual([]);
-			expect(result.misfitNotes).toEqual([]);
-		});
-
-		it('should generate noteId if missing', () => {
-			const response = `{
-				"synonymPatterns": [],
-				"misfitNotes": [
-					{
-						"noteTitle": "My Test Note",
-						"currentConceptId": "concept-1",
-						"suggestedTags": [],
-						"confidence": 0.8,
-						"reason": "Test"
-					}
-				]
-			}`;
-
-			const result = parseRefinementResponse(response);
-
-			expect(result.misfitNotes[0].noteId).toBe('note-my-test-note');
-		});
-
-		it('should handle JSON in markdown code block', () => {
-			const response = `\`\`\`json
-{
-	"synonymPatterns": [],
-	"misfitNotes": []
-}
-\`\`\``;
-
-			const result = parseRefinementResponse(response);
-
-			expect(result.synonymPatterns).toEqual([]);
-			expect(result.misfitNotes).toEqual([]);
-		});
-
-		it('should throw on invalid JSON', () => {
-			expect(() => parseRefinementResponse('not json')).toThrow();
 		});
 	});
 });

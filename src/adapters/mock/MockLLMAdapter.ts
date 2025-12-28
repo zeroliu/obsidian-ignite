@@ -1,17 +1,13 @@
-import type { ILLMProvider } from '@/ports/ILLMProvider';
 import type {
+	ClusterSummary,
 	ConceptNamingRequest,
 	ConceptNamingResponse,
 	ConceptNamingResult,
-	ClusterRefinementRequest,
-	ClusterRefinementResponse,
-	ClusterSummary,
-	ConceptSummary,
-	SynonymPattern,
-	MisfitNote,
 	LLMConfig,
+	MisfitNote,
 } from '@/domain/llm/types';
 import { DEFAULT_LLM_CONFIG } from '@/domain/llm/types';
+import type { ILLMProvider } from '@/ports/ILLMProvider';
 
 /**
  * Rule for naming clusters based on pattern matching
@@ -23,22 +19,8 @@ export interface NamingRule {
 	canonicalName: string;
 	/** Quizzability score (0-1) */
 	quizzabilityScore: number;
-	/** Whether the concept is quizzable */
-	isQuizzable: boolean;
-	/** Reason if not quizzable */
+	/** Reason if not quizzable (score < 0.4) */
 	nonQuizzableReason?: string;
-}
-
-/**
- * Rule for detecting synonym patterns
- */
-export interface SynonymRule {
-	/** Pattern to identify primary concept */
-	primaryPattern: RegExp;
-	/** Patterns that are aliases of the primary */
-	aliasPatterns: RegExp[];
-	/** Confidence score (0-1) */
-	confidence: number;
 }
 
 /**
@@ -47,10 +29,6 @@ export interface SynonymRule {
 export interface MisfitRule {
 	/** Pattern to match note titles that are misfits in any concept */
 	pattern: RegExp;
-	/** Suggested tags for re-clustering */
-	suggestedTags: string[];
-	/** Confidence score (0-1) */
-	confidence: number;
 	/** Reason for being a misfit */
 	reason: string;
 }
@@ -60,7 +38,6 @@ export interface MisfitRule {
  */
 export interface MockLLMFixture {
 	namingRules: NamingRule[];
-	synonymRules: SynonymRule[];
 	misfitRules: MisfitRule[];
 }
 
@@ -68,8 +45,8 @@ export interface MockLLMFixture {
  * Record of an LLM call for testing
  */
 export interface LLMCallRecord {
-	type: 'nameConceptsBatch' | 'refineClustersBatch';
-	request: ConceptNamingRequest | ClusterRefinementRequest;
+	type: 'nameConceptsBatch';
+	request: ConceptNamingRequest;
 	timestamp: number;
 }
 
@@ -82,86 +59,51 @@ const DEFAULT_NAMING_RULES: NamingRule[] = [
 		pattern: /react/i,
 		canonicalName: 'React Development',
 		quizzabilityScore: 0.9,
-		isQuizzable: true,
 	},
 	{
 		pattern: /typescript|ts\b/i,
 		canonicalName: 'TypeScript',
 		quizzabilityScore: 0.9,
-		isQuizzable: true,
 	},
 	{
 		pattern: /javascript|js\b/i,
 		canonicalName: 'JavaScript',
 		quizzabilityScore: 0.85,
-		isQuizzable: true,
 	},
 	{
 		pattern: /python/i,
 		canonicalName: 'Python Programming',
 		quizzabilityScore: 0.9,
-		isQuizzable: true,
 	},
 	{
 		pattern: /golf/i,
 		canonicalName: 'Golf Mechanics',
 		quizzabilityScore: 0.75,
-		isQuizzable: true,
 	},
 	{
 		pattern: /algorithm/i,
 		canonicalName: 'Algorithms',
 		quizzabilityScore: 0.95,
-		isQuizzable: true,
 	},
 
-	// Non-quizzable content
+	// Non-quizzable content (score < 0.4)
 	{
 		pattern: /meeting|standup|sync\b/i,
 		canonicalName: 'Meeting Notes',
 		quizzabilityScore: 0.1,
-		isQuizzable: false,
 		nonQuizzableReason: 'Meeting notes are time-bound and not suitable for spaced repetition',
 	},
 	{
 		pattern: /daily|journal/i,
 		canonicalName: 'Daily Journal',
 		quizzabilityScore: 0.15,
-		isQuizzable: false,
 		nonQuizzableReason: 'Daily journal entries are personal reflections, not knowledge to recall',
 	},
 	{
 		pattern: /todo|task/i,
 		canonicalName: 'Task Lists',
 		quizzabilityScore: 0.05,
-		isQuizzable: false,
 		nonQuizzableReason: 'Task lists are ephemeral and not suitable for long-term recall',
-	},
-];
-
-/**
- * Default synonym rules
- */
-const DEFAULT_SYNONYM_RULES: SynonymRule[] = [
-	{
-		primaryPattern: /firework/i,
-		aliasPatterns: [/\bfw\b/i],
-		confidence: 0.95,
-	},
-	{
-		primaryPattern: /javascript/i,
-		aliasPatterns: [/\bjs\b/i],
-		confidence: 0.98,
-	},
-	{
-		primaryPattern: /typescript/i,
-		aliasPatterns: [/\bts\b/i],
-		confidence: 0.98,
-	},
-	{
-		primaryPattern: /react\s*hooks?/i,
-		aliasPatterns: [/hooks?\s*(in\s*)?react/i],
-		confidence: 0.9,
 	},
 ];
 
@@ -171,33 +113,29 @@ const DEFAULT_SYNONYM_RULES: SynonymRule[] = [
 const DEFAULT_MISFIT_RULES: MisfitRule[] = [
 	{
 		pattern: /grocery|shopping\s*list/i,
-		suggestedTags: ['#personal', '#shopping', '#lists'],
-		confidence: 0.9,
 		reason: 'Shopping lists are personal/productivity content, not knowledge',
 	},
 	{
 		pattern: /recipe/i,
-		suggestedTags: ['#cooking', '#recipes', '#personal'],
-		confidence: 0.85,
 		reason: 'Recipes belong in a cooking/food category',
 	},
 ];
 
 /**
  * Mock implementation of ILLMProvider for testing
- * Uses deterministic pattern-based rules for reproducible tests
+ *
+ * Uses deterministic pattern-based rules for reproducible tests.
+ * Integrates misfit detection into the naming stage.
  */
 export class MockLLMAdapter implements ILLMProvider {
 	private config: LLMConfig;
 	private namingRules: NamingRule[];
-	private synonymRules: SynonymRule[];
 	private misfitRules: MisfitRule[];
 	private callHistory: LLMCallRecord[] = [];
 
 	constructor(config?: Partial<LLMConfig>) {
 		this.config = { ...DEFAULT_LLM_CONFIG, ...config };
 		this.namingRules = [...DEFAULT_NAMING_RULES];
-		this.synonymRules = [...DEFAULT_SYNONYM_RULES];
 		this.misfitRules = [...DEFAULT_MISFIT_RULES];
 	}
 
@@ -224,26 +162,6 @@ export class MockLLMAdapter implements ILLMProvider {
 		};
 	}
 
-	async refineClustersBatch(request: ClusterRefinementRequest): Promise<ClusterRefinementResponse> {
-		this.callHistory.push({
-			type: 'refineClustersBatch',
-			request,
-			timestamp: Date.now(),
-		});
-
-		const synonymPatterns = this.detectSynonyms(request.concepts);
-		const misfitNotes = this.detectMisfits(request.concepts);
-
-		return {
-			synonymPatterns,
-			misfitNotes,
-			usage: {
-				inputTokens: this.estimateInputTokens(request),
-				outputTokens: 50,
-			},
-		};
-	}
-
 	getConfig(): LLMConfig {
 		return { ...this.config };
 	}
@@ -254,6 +172,7 @@ export class MockLLMAdapter implements ILLMProvider {
 
 	/**
 	 * Name a single cluster based on pattern matching
+	 * Also detects misfit notes
 	 */
 	private nameSingleCluster(cluster: ClusterSummary): ConceptNamingResult {
 		// Build search text from all cluster info
@@ -264,6 +183,9 @@ export class MockLLMAdapter implements ILLMProvider {
 			cluster.folderPath,
 		].join(' ');
 
+		// Detect misfit notes from representative titles
+		const misfitNotes = this.detectMisfitsInTitles(cluster.representativeTitles);
+
 		// Find matching rule
 		for (const rule of this.namingRules) {
 			if (rule.pattern.test(searchText)) {
@@ -271,9 +193,9 @@ export class MockLLMAdapter implements ILLMProvider {
 					clusterId: cluster.clusterId,
 					canonicalName: rule.canonicalName,
 					quizzabilityScore: rule.quizzabilityScore,
-					isQuizzable: rule.isQuizzable,
 					nonQuizzableReason: rule.nonQuizzableReason,
 					suggestedMerges: [],
+					misfitNotes,
 				};
 			}
 		}
@@ -288,8 +210,8 @@ export class MockLLMAdapter implements ILLMProvider {
 			clusterId: cluster.clusterId,
 			canonicalName: defaultName,
 			quizzabilityScore: 0.5,
-			isQuizzable: true,
 			suggestedMerges: [],
+			misfitNotes,
 		};
 	}
 
@@ -329,70 +251,18 @@ export class MockLLMAdapter implements ILLMProvider {
 	}
 
 	/**
-	 * Detect synonym patterns between concepts
+	 * Detect misfit notes from representative titles
 	 */
-	private detectSynonyms(concepts: ConceptSummary[]): SynonymPattern[] {
-		const patterns: SynonymPattern[] = [];
-		const matched = new Set<string>();
-
-		for (const rule of this.synonymRules) {
-			let primary: ConceptSummary | null = null;
-			const aliases: ConceptSummary[] = [];
-
-			for (const concept of concepts) {
-				if (matched.has(concept.conceptId)) continue;
-
-				const searchText = [concept.name, ...concept.sampleTitles].join(' ');
-
-				if (rule.primaryPattern.test(searchText)) {
-					primary = concept;
-				} else {
-					for (const aliasPattern of rule.aliasPatterns) {
-						if (aliasPattern.test(searchText)) {
-							aliases.push(concept);
-							break;
-						}
-					}
-				}
-			}
-
-			if (primary && aliases.length > 0) {
-				matched.add(primary.conceptId);
-				for (const alias of aliases) {
-					matched.add(alias.conceptId);
-				}
-
-				patterns.push({
-					primaryConceptId: primary.conceptId,
-					aliasConceptIds: aliases.map((a) => a.conceptId),
-					confidence: rule.confidence,
-					reason: `"${aliases.map((a) => a.name).join('", "')}" is an alias for "${primary.name}"`,
-				});
-			}
-		}
-
-		return patterns;
-	}
-
-	/**
-	 * Detect misfit notes in concepts
-	 */
-	private detectMisfits(concepts: ConceptSummary[]): MisfitNote[] {
+	private detectMisfitsInTitles(titles: string[]): MisfitNote[] {
 		const misfits: MisfitNote[] = [];
 
-		for (const concept of concepts) {
-			for (const title of concept.sampleTitles) {
-				for (const rule of this.misfitRules) {
-					if (rule.pattern.test(title)) {
-						misfits.push({
-							noteId: `note-${title.toLowerCase().replace(/\s+/g, '-')}`,
-							noteTitle: title,
-							currentConceptId: concept.conceptId,
-							suggestedTags: rule.suggestedTags,
-							confidence: rule.confidence,
-							reason: rule.reason,
-						});
-					}
+		for (const title of titles) {
+			for (const rule of this.misfitRules) {
+				if (rule.pattern.test(title)) {
+					misfits.push({
+						noteId: this.generateNoteIdFromTitle(title),
+						reason: rule.reason,
+					});
 				}
 			}
 		}
@@ -401,9 +271,19 @@ export class MockLLMAdapter implements ILLMProvider {
 	}
 
 	/**
+	 * Generate a note ID from title (for testing)
+	 */
+	private generateNoteIdFromTitle(title: string): string {
+		return `note-${title
+			.toLowerCase()
+			.replace(/\s+/g, '-')
+			.replace(/[^a-z0-9-]/g, '')}`;
+	}
+
+	/**
 	 * Estimate input tokens (rough approximation)
 	 */
-	private estimateInputTokens(request: ConceptNamingRequest | ClusterRefinementRequest): number {
+	private estimateInputTokens(request: ConceptNamingRequest): number {
 		const json = JSON.stringify(request);
 		// Rough estimate: ~4 characters per token
 		return Math.ceil(json.length / 4);
@@ -438,7 +318,6 @@ export class MockLLMAdapter implements ILLMProvider {
 	 */
 	_setFixture(fixture: MockLLMFixture): void {
 		this.namingRules = [...fixture.namingRules];
-		this.synonymRules = [...fixture.synonymRules];
 		this.misfitRules = [...fixture.misfitRules];
 	}
 
@@ -448,13 +327,6 @@ export class MockLLMAdapter implements ILLMProvider {
 	_addNamingRule(rule: NamingRule): void {
 		// Add to beginning for priority
 		this.namingRules.unshift(rule);
-	}
-
-	/**
-	 * Add a single synonym rule
-	 */
-	_addSynonymRule(rule: SynonymRule): void {
-		this.synonymRules.unshift(rule);
 	}
 
 	/**
@@ -469,7 +341,6 @@ export class MockLLMAdapter implements ILLMProvider {
 	 */
 	_resetRules(): void {
 		this.namingRules = [...DEFAULT_NAMING_RULES];
-		this.synonymRules = [...DEFAULT_SYNONYM_RULES];
 		this.misfitRules = [...DEFAULT_MISFIT_RULES];
 	}
 }

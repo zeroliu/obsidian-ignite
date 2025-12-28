@@ -1,13 +1,13 @@
 import type { Cluster } from '@/domain/clustering/types';
-import type { FileInfo } from '@/ports/IVaultProvider';
 import type {
 	ClusterSummary,
+	// Legacy type (deprecated)
 	Concept,
 	ConceptNamingResult,
-	ConceptSummary,
-	SynonymPattern,
 	MisfitNote,
+	TrackedConcept,
 } from '@/domain/llm/types';
+import type { FileInfo } from '@/ports/IVaultProvider';
 
 /**
  * Create a test cluster with default values
@@ -41,23 +41,27 @@ export function createTestClusterSummary(overrides: Partial<ClusterSummary> = {}
 }
 
 /**
- * Create a test concept with default values
+ * Create a test TrackedConcept with default values
  */
-export function createTestConcept(overrides: Partial<Concept> = {}): Concept {
+export function createTestTrackedConcept(overrides: Partial<TrackedConcept> = {}): TrackedConcept {
 	const id = overrides.id ?? `concept-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+	const now = Date.now();
 	return {
 		id,
-		name: overrides.name ?? 'Test Concept',
+		canonicalName: overrides.canonicalName ?? 'Test Concept',
 		noteIds: overrides.noteIds ?? ['note-1.md', 'note-2.md'],
 		quizzabilityScore: overrides.quizzabilityScore ?? 0.8,
-		isQuizzable: overrides.isQuizzable ?? true,
-		originalClusterIds: overrides.originalClusterIds ?? ['cluster-1'],
-		createdAt: overrides.createdAt ?? Date.now(),
+		clusterId: overrides.clusterId ?? 'cluster-1',
+		metadata: overrides.metadata ?? {
+			createdAt: now,
+			lastUpdated: now,
+		},
+		evolutionHistory: overrides.evolutionHistory ?? [],
 	};
 }
 
 /**
- * Create a test naming result
+ * Create a test naming result with misfitNotes
  */
 export function createTestNamingResult(
 	overrides: Partial<ConceptNamingResult> = {},
@@ -66,9 +70,9 @@ export function createTestNamingResult(
 		clusterId: overrides.clusterId ?? 'cluster-1',
 		canonicalName: overrides.canonicalName ?? 'Test Concept',
 		quizzabilityScore: overrides.quizzabilityScore ?? 0.8,
-		isQuizzable: overrides.isQuizzable ?? true,
 		nonQuizzableReason: overrides.nonQuizzableReason,
 		suggestedMerges: overrides.suggestedMerges ?? [],
+		misfitNotes: overrides.misfitNotes ?? [],
 	};
 }
 
@@ -142,7 +146,7 @@ export const journalClusterFixture: Cluster = createTestCluster({
 });
 
 /**
- * JavaScript cluster fixture (for synonym testing with React)
+ * JavaScript cluster fixture (for merge testing with React)
  */
 export const javascriptClusterFixture: Cluster = createTestCluster({
 	id: 'cluster-js',
@@ -155,49 +159,11 @@ export const javascriptClusterFixture: Cluster = createTestCluster({
 });
 
 /**
- * Expected concept summaries for refinement testing
- */
-export const conceptSummaryFixtures: ConceptSummary[] = [
-	{
-		conceptId: 'concept-js-1',
-		name: 'JavaScript Development',
-		sampleTitles: ['ES6 Features', 'Async/Await', 'Array Methods'],
-		noteCount: 30,
-	},
-	{
-		conceptId: 'concept-js-2',
-		name: 'JS Tutorials',
-		sampleTitles: ['JS Basics', 'JavaScript Functions', 'DOM Manipulation'],
-		noteCount: 15,
-	},
-	{
-		conceptId: 'concept-react',
-		name: 'React Development',
-		sampleTitles: ['React Hooks', 'My Grocery List', 'Component Patterns'],
-		noteCount: 20,
-	},
-];
-
-/**
- * Expected synonym pattern result
- */
-export const expectedSynonymPattern: SynonymPattern = {
-	primaryConceptId: 'concept-js-1',
-	aliasConceptIds: ['concept-js-2'],
-	confidence: 0.95,
-	reason: 'JS is the standard abbreviation for JavaScript',
-};
-
-/**
  * Expected misfit note result
  */
 export const expectedMisfitNote: MisfitNote = {
-	noteId: 'note-grocery-list',
-	noteTitle: 'My Grocery List',
-	currentConceptId: 'concept-react',
-	suggestedTags: ['#personal', '#shopping', '#lists'],
-	confidence: 0.9,
-	reason: 'A grocery list is personal/productivity content, not React development knowledge',
+	noteId: 'note-my-grocery-list',
+	reason: 'Shopping lists are personal/productivity content, not knowledge',
 };
 
 /**
@@ -210,6 +176,24 @@ export const llmPipelineTestFixture = {
 		...meetingClusterFixture.noteIds,
 		...journalClusterFixture.noteIds,
 	]),
-	expectedQuizzableCount: 1, // Only React
-	expectedNonQuizzableCount: 2, // Meetings + Journal
+	expectedQuizzableCount: 1, // Only React (score >= 0.4)
+	expectedNonQuizzableCount: 2, // Meetings + Journal (score < 0.4)
 };
+
+// ==================== Legacy Helpers (Deprecated) ====================
+
+/**
+ * @deprecated Use createTestTrackedConcept instead
+ */
+export function createTestConcept(overrides: Partial<Concept> = {}): Concept {
+	const id = overrides.id ?? `concept-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+	return {
+		id,
+		name: overrides.name ?? 'Test Concept',
+		noteIds: overrides.noteIds ?? ['note-1.md', 'note-2.md'],
+		quizzabilityScore: overrides.quizzabilityScore ?? 0.8,
+		isQuizzable: overrides.isQuizzable ?? true,
+		originalClusterIds: overrides.originalClusterIds ?? ['cluster-1'],
+		createdAt: overrides.createdAt ?? Date.now(),
+	};
+}

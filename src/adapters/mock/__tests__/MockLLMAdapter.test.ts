@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import type { ClusterSummary } from '@/domain/llm/types';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MockLLMAdapter } from '../MockLLMAdapter';
-import type { ClusterSummary, ConceptSummary } from '@/domain/llm/types';
 
 describe('MockLLMAdapter', () => {
 	let adapter: MockLLMAdapter;
@@ -27,7 +27,6 @@ describe('MockLLMAdapter', () => {
 			expect(response.results).toHaveLength(1);
 			expect(response.results[0].canonicalName).toBe('React Development');
 			expect(response.results[0].quizzabilityScore).toBe(0.9);
-			expect(response.results[0].isQuizzable).toBe(true);
 		});
 
 		it('should mark meeting notes as non-quizzable', async () => {
@@ -45,7 +44,7 @@ describe('MockLLMAdapter', () => {
 			const response = await adapter.nameConceptsBatch({ clusters });
 
 			expect(response.results[0].canonicalName).toBe('Meeting Notes');
-			expect(response.results[0].isQuizzable).toBe(false);
+			expect(response.results[0].quizzabilityScore).toBeLessThan(0.4);
 			expect(response.results[0].nonQuizzableReason).toContain('Meeting notes');
 		});
 
@@ -64,7 +63,7 @@ describe('MockLLMAdapter', () => {
 			const response = await adapter.nameConceptsBatch({ clusters });
 
 			expect(response.results[0].canonicalName).toBe('Daily Journal');
-			expect(response.results[0].isQuizzable).toBe(false);
+			expect(response.results[0].quizzabilityScore).toBeLessThan(0.4);
 		});
 
 		it('should use first candidate name when no rule matches', async () => {
@@ -169,82 +168,43 @@ describe('MockLLMAdapter', () => {
 			expect(history).toHaveLength(1);
 			expect(history[0].type).toBe('nameConceptsBatch');
 		});
-	});
 
-	describe('refineClustersBatch', () => {
-		it('should detect JS/JavaScript synonym pattern', async () => {
-			const concepts: ConceptSummary[] = [
+		it('should detect misfit notes from representative titles', async () => {
+			// Reset to clean slate then add only our custom rule
+			adapter._setFixture({
+				namingRules: [
+					{
+						pattern: /react/i,
+						canonicalName: 'React Development',
+						quizzabilityScore: 0.9,
+					},
+				],
+				misfitRules: [
+					{
+						pattern: /grocery/i,
+						reason: 'Shopping list not knowledge',
+					},
+				],
+			});
+
+			const clusters: ClusterSummary[] = [
 				{
-					conceptId: 'concept-1',
-					name: 'JavaScript Development',
-					sampleTitles: ['ES6 Features', 'Async/Await'],
-					noteCount: 30,
-				},
-				{
-					conceptId: 'concept-2',
-					name: 'JS Tutorials',
-					sampleTitles: ['JS Basics', 'DOM Manipulation'],
-					noteCount: 15,
-				},
-			];
-
-			const response = await adapter.refineClustersBatch({ concepts });
-
-			expect(response.synonymPatterns).toHaveLength(1);
-			expect(response.synonymPatterns[0].primaryConceptId).toBe('concept-1');
-			expect(response.synonymPatterns[0].aliasConceptIds).toContain('concept-2');
-			expect(response.synonymPatterns[0].confidence).toBe(0.98);
-		});
-
-		it('should detect misfit notes', async () => {
-			const concepts: ConceptSummary[] = [
-				{
-					conceptId: 'concept-1',
-					name: 'React Development',
-					sampleTitles: ['React Hooks', 'My Grocery List', 'Component Patterns'],
+					clusterId: 'cluster-1',
+					candidateNames: ['React'],
+					representativeTitles: ['React Hooks', 'My Grocery List', 'State Management'],
+					commonTags: ['#react'],
+					folderPath: 'tech/react',
 					noteCount: 20,
 				},
 			];
 
-			const response = await adapter.refineClustersBatch({ concepts });
+			const response = await adapter.nameConceptsBatch({ clusters });
 
-			expect(response.misfitNotes).toHaveLength(1);
-			expect(response.misfitNotes[0].noteTitle).toBe('My Grocery List');
-			expect(response.misfitNotes[0].currentConceptId).toBe('concept-1');
-			expect(response.misfitNotes[0].suggestedTags).toContain('#shopping');
-		});
-
-		it('should return empty arrays when no issues found', async () => {
-			const concepts: ConceptSummary[] = [
-				{
-					conceptId: 'concept-1',
-					name: 'Python Programming',
-					sampleTitles: ['Python Basics', 'Decorators', 'List Comprehensions'],
-					noteCount: 25,
-				},
-			];
-
-			const response = await adapter.refineClustersBatch({ concepts });
-
-			expect(response.synonymPatterns).toHaveLength(0);
-			expect(response.misfitNotes).toHaveLength(0);
-		});
-
-		it('should record call in history', async () => {
-			const concepts: ConceptSummary[] = [
-				{
-					conceptId: 'concept-1',
-					name: 'Test',
-					sampleTitles: [],
-					noteCount: 1,
-				},
-			];
-
-			await adapter.refineClustersBatch({ concepts });
-
-			const history = adapter._getCallHistory();
-			expect(history).toHaveLength(1);
-			expect(history[0].type).toBe('refineClustersBatch');
+			// Should detect the grocery list as a misfit
+			expect(response.results[0].misfitNotes).toHaveLength(1);
+			// noteId is generated from title: lowercase, spaces to hyphens, non-alphanumeric removed
+			expect(response.results[0].misfitNotes[0].noteId).toBe('note-my-grocery-list');
+			expect(response.results[0].misfitNotes[0].reason).toBe('Shopping list not knowledge');
 		});
 	});
 
@@ -295,7 +255,6 @@ describe('MockLLMAdapter', () => {
 				pattern: /custom/i,
 				canonicalName: 'Custom Concept',
 				quizzabilityScore: 0.77,
-				isQuizzable: true,
 			});
 
 			const response = await adapter.nameConceptsBatch({
@@ -322,10 +281,8 @@ describe('MockLLMAdapter', () => {
 						pattern: /fixture/i,
 						canonicalName: 'Fixture Concept',
 						quizzabilityScore: 0.66,
-						isQuizzable: true,
 					},
 				],
-				synonymRules: [],
 				misfitRules: [],
 			});
 
@@ -349,7 +306,6 @@ describe('MockLLMAdapter', () => {
 		it('should reset to default rules', async () => {
 			adapter._setFixture({
 				namingRules: [],
-				synonymRules: [],
 				misfitRules: [],
 			});
 
@@ -369,6 +325,41 @@ describe('MockLLMAdapter', () => {
 			});
 
 			expect(response.results[0].canonicalName).toBe('React Development');
+		});
+	});
+
+	describe('quizzability helper', () => {
+		it('should correctly identify quizzable concepts using isQuizzable', async () => {
+			const clusters: ClusterSummary[] = [
+				{
+					clusterId: 'cluster-react',
+					candidateNames: ['React'],
+					representativeTitles: ['Hooks Guide'],
+					commonTags: ['#react'],
+					folderPath: 'tech/react',
+					noteCount: 10,
+				},
+				{
+					clusterId: 'cluster-meeting',
+					candidateNames: ['Meeting'],
+					representativeTitles: ['Standup'],
+					commonTags: ['#meeting'],
+					folderPath: 'meetings',
+					noteCount: 5,
+				},
+			];
+
+			const response = await adapter.nameConceptsBatch({ clusters });
+
+			// Use the isQuizzable function from types to check quizzability
+			const reactResult = response.results.find((r) => r.clusterId === 'cluster-react');
+			const meetingResult = response.results.find((r) => r.clusterId === 'cluster-meeting');
+
+			// React should be quizzable (score >= 0.4)
+			expect(reactResult?.quizzabilityScore).toBeGreaterThanOrEqual(0.4);
+
+			// Meeting should not be quizzable (score < 0.4)
+			expect(meetingResult?.quizzabilityScore).toBeLessThan(0.4);
 		});
 	});
 });

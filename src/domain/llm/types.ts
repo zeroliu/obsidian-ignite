@@ -1,6 +1,12 @@
 /**
- * LLM Domain Types for Concept Naming and Cluster Refinement
+ * LLM Domain Types for Concept Naming
+ *
+ * This module provides types for the LLM-powered concept naming pipeline.
+ * Stage 3 (naming) and Stage 3.5 (refinement) are merged into a single stage.
  */
+
+import type { EvolutionEvent } from '@/domain/evolution/types';
+import { QUIZZABILITY_THRESHOLD } from '@/domain/evolution/types';
 
 /**
  * Minimal cluster info sent to LLM to save tokens
@@ -21,7 +27,18 @@ export interface ClusterSummary {
 }
 
 /**
+ * A note that doesn't fit its cluster (detected during naming)
+ */
+export interface MisfitNote {
+	/** Note ID (file path) */
+	noteId: string;
+	/** Reason why this note doesn't fit */
+	reason: string;
+}
+
+/**
  * LLM response for a single cluster's concept naming
+ * Includes misfit detection (merged Stage 3 + 3.5)
  */
 export interface ConceptNamingResult {
 	/** Cluster ID this result applies to */
@@ -30,64 +47,38 @@ export interface ConceptNamingResult {
 	canonicalName: string;
 	/** Quizzability score (0-1) */
 	quizzabilityScore: number;
-	/** Whether the concept is suitable for quizzing */
-	isQuizzable: boolean;
-	/** Reason if not quizzable */
+	/** Reason if not quizzable (score < 0.4) */
 	nonQuizzableReason?: string;
 	/** Other cluster IDs that should merge with this one */
 	suggestedMerges: string[];
+	/** Notes that don't fit this cluster (misfit detection) */
+	misfitNotes: MisfitNote[];
 }
 
 /**
- * A named concept (final output)
+ * TrackedConcept - A named concept with evolution tracking
+ *
+ * This is the primary concept type used throughout the application.
+ * Quizzability is derived from quizzabilityScore >= QUIZZABILITY_THRESHOLD (0.4).
  */
-export interface Concept {
+export interface TrackedConcept {
 	/** Unique concept identifier */
 	id: string;
 	/** Canonical concept name */
-	name: string;
+	canonicalName: string;
 	/** Note IDs (file paths) belonging to this concept */
 	noteIds: string[];
 	/** Quizzability score (0-1) */
 	quizzabilityScore: number;
-	/** Whether this concept is suitable for quizzing */
-	isQuizzable: boolean;
-	/** Original cluster IDs that formed this concept */
-	originalClusterIds: string[];
-	/** Timestamp when concept was created */
-	createdAt: number;
-}
-
-/**
- * Synonym pattern detected between concepts (Stage 3.5)
- */
-export interface SynonymPattern {
-	/** Concept ID to keep as primary */
-	primaryConceptId: string;
-	/** Concept IDs to merge into primary */
-	aliasConceptIds: string[];
-	/** Confidence score (0-1) */
-	confidence: number;
-	/** Explanation of why these are synonyms */
-	reason: string;
-}
-
-/**
- * A note that doesn't fit its current concept (Stage 3.5)
- */
-export interface MisfitNote {
-	/** Note ID (file path) */
-	noteId: string;
-	/** Note title for display */
-	noteTitle: string;
-	/** Current concept ID the note belongs to */
-	currentConceptId: string;
-	/** Suggested tags for re-clustering */
-	suggestedTags: string[];
-	/** Confidence score (0-1) */
-	confidence: number;
-	/** Explanation of why this note is a misfit */
-	reason: string;
+	/** Current cluster ID (singular, updated on evolution) */
+	clusterId: string;
+	/** Metadata for concept lifecycle */
+	metadata: {
+		createdAt: number;
+		lastUpdated: number;
+	};
+	/** History of evolution events for this concept */
+	evolutionHistory: EvolutionEvent[];
 }
 
 /**
@@ -104,40 +95,6 @@ export interface ConceptNamingRequest {
 export interface ConceptNamingResponse {
 	/** Naming results for each cluster */
 	results: ConceptNamingResult[];
-	/** Token usage statistics */
-	usage?: TokenUsage;
-}
-
-/**
- * Summary of a concept for refinement stage
- */
-export interface ConceptSummary {
-	/** Concept ID */
-	conceptId: string;
-	/** Concept name */
-	name: string;
-	/** Sample note titles (max 5) */
-	sampleTitles: string[];
-	/** Number of notes in concept */
-	noteCount: number;
-}
-
-/**
- * Request for cluster refinement batch
- */
-export interface ClusterRefinementRequest {
-	/** Concepts to analyze for refinement */
-	concepts: ConceptSummary[];
-}
-
-/**
- * Response from cluster refinement batch
- */
-export interface ClusterRefinementResponse {
-	/** Detected synonym patterns */
-	synonymPatterns: SynonymPattern[];
-	/** Detected misfit notes */
-	misfitNotes: MisfitNote[];
 	/** Token usage statistics */
 	usage?: TokenUsage;
 }
@@ -185,7 +142,76 @@ export const DEFAULT_LLM_CONFIG: LLMConfig = {
 };
 
 /**
- * Helper to create a concept with defaults
+ * Check if a concept is quizzable based on its score
+ *
+ * @param concept - Concept to check
+ * @returns true if quizzability score >= threshold
+ */
+export function isQuizzable(concept: TrackedConcept): boolean {
+	return concept.quizzabilityScore >= QUIZZABILITY_THRESHOLD;
+}
+
+/**
+ * Check if a quizzability score indicates quizzable content
+ *
+ * @param score - Quizzability score (0-1)
+ * @returns true if score >= threshold
+ */
+export function isQuizzableScore(score: number): boolean {
+	return score >= QUIZZABILITY_THRESHOLD;
+}
+
+/**
+ * Helper to create a TrackedConcept with defaults
+ */
+export function createTrackedConcept(
+	partial: Partial<TrackedConcept> & {
+		canonicalName: string;
+		noteIds: string[];
+		clusterId: string;
+	},
+): TrackedConcept {
+	const now = Date.now();
+	return {
+		id: partial.id ?? `concept-${now}-${Math.random().toString(36).slice(2, 8)}`,
+		canonicalName: partial.canonicalName,
+		noteIds: partial.noteIds,
+		quizzabilityScore: partial.quizzabilityScore ?? 0.5,
+		clusterId: partial.clusterId,
+		metadata: partial.metadata ?? {
+			createdAt: now,
+			lastUpdated: now,
+		},
+		evolutionHistory: partial.evolutionHistory ?? [],
+	};
+}
+
+/**
+ * Generate a unique concept ID
+ */
+export function generateConceptId(): string {
+	return `concept-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// ============ Legacy Types (Deprecated) ============
+// These types are kept for backward compatibility during migration.
+// They will be removed in a future version.
+
+/**
+ * @deprecated Use TrackedConcept instead
+ */
+export interface Concept {
+	id: string;
+	name: string;
+	noteIds: string[];
+	quizzabilityScore: number;
+	isQuizzable: boolean;
+	originalClusterIds: string[];
+	createdAt: number;
+}
+
+/**
+ * @deprecated Use createTrackedConcept instead
  */
 export function createConcept(
 	partial: Partial<Concept> & { name: string; noteIds: string[] },
@@ -202,8 +228,45 @@ export function createConcept(
 }
 
 /**
- * Generate a unique concept ID
+ * Convert a TrackedConcept to legacy Concept format
+ *
+ * @deprecated Use TrackedConcept directly
  */
-export function generateConceptId(): string {
-	return `concept-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+export function toLegacyConcept(tracked: TrackedConcept): Concept {
+	return {
+		id: tracked.id,
+		name: tracked.canonicalName,
+		noteIds: tracked.noteIds,
+		quizzabilityScore: tracked.quizzabilityScore,
+		isQuizzable: isQuizzable(tracked),
+		originalClusterIds: [tracked.clusterId],
+		createdAt: tracked.metadata.createdAt,
+	};
 }
+
+/**
+ * Convert a legacy Concept to TrackedConcept format
+ *
+ * @deprecated Use TrackedConcept directly
+ */
+export function fromLegacyConcept(legacy: Concept): TrackedConcept {
+	return {
+		id: legacy.id,
+		canonicalName: legacy.name,
+		noteIds: legacy.noteIds,
+		quizzabilityScore: legacy.quizzabilityScore,
+		clusterId: legacy.originalClusterIds[0] ?? '',
+		metadata: {
+			createdAt: legacy.createdAt,
+			lastUpdated: legacy.createdAt,
+		},
+		evolutionHistory: [],
+	};
+}
+
+// ============ Removed Types ============
+// The following types have been removed as part of the Stage 3/3.5 merge:
+// - SynonymPattern (synonym detection now handled via suggestedMerges in ConceptNamingResult)
+// - ConceptSummary (no longer needed without separate refinement stage)
+// - ClusterRefinementRequest (no longer needed without separate refinement stage)
+// - ClusterRefinementResponse (no longer needed without separate refinement stage)

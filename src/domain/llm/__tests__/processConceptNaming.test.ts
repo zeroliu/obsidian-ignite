@@ -1,13 +1,12 @@
-import { describe, it, expect } from 'vitest';
-import {
-	processConceptNaming,
-	applyMergeSuggestions,
-	createConceptFromResult,
-	filterQuizzableConcepts,
-	filterNonQuizzableConcepts,
-} from '../processConceptNaming';
 import type { Cluster } from '@/domain/clustering/types';
-import type { ConceptNamingResult, Concept } from '../types';
+import { describe, expect, it } from 'vitest';
+import {
+	createConceptFromResult,
+	filterNonQuizzableConcepts,
+	filterQuizzableConcepts,
+	processConceptNaming,
+} from '../processConceptNaming';
+import type { ConceptNamingResult, TrackedConcept } from '../types';
 
 describe('processConceptNaming', () => {
 	const createCluster = (id: string, noteIds: string[]): Cluster => ({
@@ -29,13 +28,13 @@ describe('processConceptNaming', () => {
 		clusterId,
 		canonicalName,
 		quizzabilityScore: 0.8,
-		isQuizzable: true,
 		suggestedMerges: [],
+		misfitNotes: [],
 		...overrides,
 	});
 
 	describe('processConceptNaming', () => {
-		it('should create concepts from clusters and results', () => {
+		it('should create TrackedConcepts from clusters and results', () => {
 			const clusters = [
 				createCluster('cluster-1', ['note-1.md', 'note-2.md']),
 				createCluster('cluster-2', ['note-3.md']),
@@ -46,32 +45,31 @@ describe('processConceptNaming', () => {
 				createResult('cluster-2', 'TypeScript', { quizzabilityScore: 0.9 }),
 			];
 
-			const concepts = processConceptNaming(clusters, results);
+			const { concepts } = processConceptNaming(clusters, results);
 
 			expect(concepts).toHaveLength(2);
-			expect(concepts[0].name).toBe('React Development');
+			expect(concepts[0].canonicalName).toBe('React Development');
 			expect(concepts[0].noteIds).toEqual(['note-1.md', 'note-2.md']);
-			expect(concepts[0].originalClusterIds).toContain('cluster-1');
+			expect(concepts[0].clusterId).toBe('cluster-1');
 
-			expect(concepts[1].name).toBe('TypeScript');
+			expect(concepts[1].canonicalName).toBe('TypeScript');
 			expect(concepts[1].quizzabilityScore).toBe(0.9);
 		});
 
-		it('should handle non-quizzable concepts', () => {
+		it('should handle non-quizzable concepts (score < 0.4)', () => {
 			const clusters = [createCluster('cluster-1', ['note-1.md'])];
 
 			const results = [
 				createResult('cluster-1', 'Meeting Notes', {
 					quizzabilityScore: 0.1,
-					isQuizzable: false,
 					nonQuizzableReason: 'Ephemeral content',
 				}),
 			];
 
-			const concepts = processConceptNaming(clusters, results);
+			const { concepts } = processConceptNaming(clusters, results);
 
-			expect(concepts[0].isQuizzable).toBe(false);
 			expect(concepts[0].quizzabilityScore).toBe(0.1);
+			// Note: quizzability is now derived from score, not stored
 		});
 
 		it('should merge clusters based on suggestedMerges', () => {
@@ -87,15 +85,14 @@ describe('processConceptNaming', () => {
 				createResult('cluster-2', 'React Hooks'),
 			];
 
-			const concepts = processConceptNaming(clusters, results);
+			const { concepts } = processConceptNaming(clusters, results);
 
 			expect(concepts).toHaveLength(1);
-			expect(concepts[0].name).toBe('React Development');
+			expect(concepts[0].canonicalName).toBe('React Development');
 			expect(concepts[0].noteIds).toHaveLength(4);
 			expect(concepts[0].noteIds).toContain('note-1.md');
 			expect(concepts[0].noteIds).toContain('note-3.md');
-			expect(concepts[0].originalClusterIds).toContain('cluster-1');
-			expect(concepts[0].originalClusterIds).toContain('cluster-2');
+			expect(concepts[0].clusterId).toBe('cluster-1');
 		});
 
 		it('should handle multiple merge targets', () => {
@@ -113,11 +110,10 @@ describe('processConceptNaming', () => {
 				createResult('cluster-3', 'ES6'),
 			];
 
-			const concepts = processConceptNaming(clusters, results);
+			const { concepts } = processConceptNaming(clusters, results);
 
 			expect(concepts).toHaveLength(1);
 			expect(concepts[0].noteIds).toHaveLength(3);
-			expect(concepts[0].originalClusterIds).toHaveLength(3);
 		});
 
 		it('should handle missing results with defaults', () => {
@@ -128,173 +124,199 @@ describe('processConceptNaming', () => {
 
 			const results = [createResult('cluster-1', 'React Development')];
 
-			const concepts = processConceptNaming(clusters, results);
+			const { concepts } = processConceptNaming(clusters, results);
 
 			expect(concepts).toHaveLength(2);
-			expect(concepts[0].name).toBe('React Development');
-			expect(concepts[1].name).toBe('Candidate for cluster-2'); // Falls back to candidate name
+			expect(concepts[0].canonicalName).toBe('React Development');
+			expect(concepts[1].canonicalName).toBe('Candidate for cluster-2'); // Falls back to candidate name
 		});
 
 		it('should handle empty clusters', () => {
-			const concepts = processConceptNaming([], []);
+			const { concepts, misfitNotes } = processConceptNaming([], []);
 			expect(concepts).toEqual([]);
-		});
-	});
-
-	describe('applyMergeSuggestions', () => {
-		const createConcept = (
-			id: string,
-			name: string,
-			noteIds: string[],
-			originalClusterIds: string[],
-		): Concept => ({
-			id,
-			name,
-			noteIds,
-			quizzabilityScore: 0.8,
-			isQuizzable: true,
-			originalClusterIds,
-			createdAt: Date.now(),
+			expect(misfitNotes).toEqual([]);
 		});
 
-		it('should merge concepts based on cluster merge suggestions', () => {
-			const concepts = [
-				createConcept('concept-1', 'JavaScript', ['note-1.md'], ['cluster-1']),
-				createConcept('concept-2', 'JS Tutorials', ['note-2.md'], ['cluster-2']),
+		it('should collect and filter out misfit notes', () => {
+			const clusters = [createCluster('cluster-1', ['note-1.md', 'grocery-list.md', 'note-2.md'])];
+
+			const results = [
+				createResult('cluster-1', 'React Development', {
+					misfitNotes: [{ noteId: 'grocery-list.md', reason: 'Not programming content' }],
+				}),
 			];
 
-			const results: ConceptNamingResult[] = [
-				{
-					clusterId: 'cluster-1',
-					canonicalName: 'JavaScript',
-					quizzabilityScore: 0.9,
-					isQuizzable: true,
-					suggestedMerges: ['cluster-2'],
-				},
-			];
+			const { concepts, misfitNotes } = processConceptNaming(clusters, results);
 
-			const merged = applyMergeSuggestions(concepts, results);
+			expect(misfitNotes).toHaveLength(1);
+			expect(misfitNotes[0].noteId).toBe('grocery-list.md');
 
-			expect(merged).toHaveLength(1);
-			expect(merged[0].noteIds).toContain('note-1.md');
-			expect(merged[0].noteIds).toContain('note-2.md');
+			// Misfit note should be filtered out of concept
+			expect(concepts[0].noteIds).not.toContain('grocery-list.md');
+			expect(concepts[0].noteIds).toHaveLength(2);
 		});
 
-		it('should return original concepts if no merges', () => {
-			const concepts = [
-				createConcept('concept-1', 'React', ['note-1.md'], ['cluster-1']),
-				createConcept('concept-2', 'Python', ['note-2.md'], ['cluster-2']),
+		it('should not create concept if all notes are misfits', () => {
+			const clusters = [createCluster('cluster-1', ['misfit-1.md', 'misfit-2.md'])];
+
+			const results = [
+				createResult('cluster-1', 'Mixed Content', {
+					misfitNotes: [
+						{ noteId: 'misfit-1.md', reason: 'Not relevant' },
+						{ noteId: 'misfit-2.md', reason: 'Not relevant' },
+					],
+				}),
 			];
 
-			const results: ConceptNamingResult[] = [];
+			const { concepts } = processConceptNaming(clusters, results);
 
-			const merged = applyMergeSuggestions(concepts, results);
-
-			expect(merged).toHaveLength(2);
-			expect(merged).toEqual(concepts);
+			expect(concepts).toHaveLength(0);
 		});
 
-		it('should deduplicate note IDs after merge', () => {
-			const concepts = [
-				createConcept('concept-1', 'React', ['note-1.md', 'note-2.md'], ['cluster-1']),
-				createConcept('concept-2', 'React Hooks', ['note-2.md', 'note-3.md'], ['cluster-2']),
-			];
+		it('should initialize empty evolutionHistory', () => {
+			const clusters = [createCluster('cluster-1', ['note-1.md'])];
+			const results = [createResult('cluster-1', 'Test Concept')];
 
-			const results: ConceptNamingResult[] = [
-				{
-					clusterId: 'cluster-1',
-					canonicalName: 'React',
-					quizzabilityScore: 0.9,
-					isQuizzable: true,
-					suggestedMerges: ['cluster-2'],
-				},
-			];
+			const { concepts } = processConceptNaming(clusters, results);
 
-			const merged = applyMergeSuggestions(concepts, results);
+			expect(concepts[0].evolutionHistory).toEqual([]);
+		});
 
-			expect(merged).toHaveLength(1);
-			// note-2.md should appear only once
-			const uniqueNotes = [...new Set(merged[0].noteIds)];
-			expect(uniqueNotes).toHaveLength(merged[0].noteIds.length);
-			expect(merged[0].noteIds).toHaveLength(3);
+		it('should set metadata timestamps', () => {
+			const clusters = [createCluster('cluster-1', ['note-1.md'])];
+			const results = [createResult('cluster-1', 'Test Concept')];
+
+			const before = Date.now();
+			const { concepts } = processConceptNaming(clusters, results);
+			const after = Date.now();
+
+			expect(concepts[0].metadata.createdAt).toBeGreaterThanOrEqual(before);
+			expect(concepts[0].metadata.createdAt).toBeLessThanOrEqual(after);
+			expect(concepts[0].metadata.lastUpdated).toBe(concepts[0].metadata.createdAt);
 		});
 	});
 
 	describe('createConceptFromResult', () => {
-		it('should create a concept from result and cluster', () => {
+		it('should create a TrackedConcept from result and cluster', () => {
 			const cluster = createCluster('cluster-1', ['note-1.md', 'note-2.md']);
 			const result = createResult('cluster-1', 'React Development', {
 				quizzabilityScore: 0.85,
-				isQuizzable: true,
 			});
 
 			const concept = createConceptFromResult(result, cluster);
 
-			expect(concept.name).toBe('React Development');
+			expect(concept.canonicalName).toBe('React Development');
 			expect(concept.noteIds).toEqual(['note-1.md', 'note-2.md']);
 			expect(concept.quizzabilityScore).toBe(0.85);
-			expect(concept.isQuizzable).toBe(true);
-			expect(concept.originalClusterIds).toContain('cluster-1');
+			expect(concept.clusterId).toBe('cluster-1');
+		});
+
+		it('should exclude misfit notes when creating concept', () => {
+			const cluster = createCluster('cluster-1', ['note-1.md', 'misfit.md', 'note-2.md']);
+			const result = createResult('cluster-1', 'React Development');
+
+			const excludeMisfits = new Set(['misfit.md']);
+			const concept = createConceptFromResult(result, cluster, excludeMisfits);
+
+			expect(concept.noteIds).toEqual(['note-1.md', 'note-2.md']);
 		});
 	});
 
 	describe('filterQuizzableConcepts', () => {
-		it('should filter to only quizzable concepts', () => {
-			const concepts: Concept[] = [
+		it('should filter to only quizzable concepts (score >= 0.4)', () => {
+			const now = Date.now();
+			const concepts: TrackedConcept[] = [
 				{
 					id: '1',
-					name: 'React',
+					canonicalName: 'React',
 					noteIds: [],
 					quizzabilityScore: 0.9,
-					isQuizzable: true,
-					originalClusterIds: [],
-					createdAt: Date.now(),
+					clusterId: 'cluster-1',
+					metadata: { createdAt: now, lastUpdated: now },
+					evolutionHistory: [],
 				},
 				{
 					id: '2',
-					name: 'Meetings',
+					canonicalName: 'Meetings',
 					noteIds: [],
 					quizzabilityScore: 0.1,
-					isQuizzable: false,
-					originalClusterIds: [],
-					createdAt: Date.now(),
+					clusterId: 'cluster-2',
+					metadata: { createdAt: now, lastUpdated: now },
+					evolutionHistory: [],
 				},
 			];
 
 			const quizzable = filterQuizzableConcepts(concepts);
 
 			expect(quizzable).toHaveLength(1);
-			expect(quizzable[0].name).toBe('React');
+			expect(quizzable[0].canonicalName).toBe('React');
+		});
+
+		it('should include concepts at threshold (0.4)', () => {
+			const now = Date.now();
+			const concepts: TrackedConcept[] = [
+				{
+					id: '1',
+					canonicalName: 'Borderline',
+					noteIds: [],
+					quizzabilityScore: 0.4,
+					clusterId: 'cluster-1',
+					metadata: { createdAt: now, lastUpdated: now },
+					evolutionHistory: [],
+				},
+			];
+
+			const quizzable = filterQuizzableConcepts(concepts);
+			expect(quizzable).toHaveLength(1);
 		});
 	});
 
 	describe('filterNonQuizzableConcepts', () => {
-		it('should filter to only non-quizzable concepts', () => {
-			const concepts: Concept[] = [
+		it('should filter to only non-quizzable concepts (score < 0.4)', () => {
+			const now = Date.now();
+			const concepts: TrackedConcept[] = [
 				{
 					id: '1',
-					name: 'React',
+					canonicalName: 'React',
 					noteIds: [],
 					quizzabilityScore: 0.9,
-					isQuizzable: true,
-					originalClusterIds: [],
-					createdAt: Date.now(),
+					clusterId: 'cluster-1',
+					metadata: { createdAt: now, lastUpdated: now },
+					evolutionHistory: [],
 				},
 				{
 					id: '2',
-					name: 'Meetings',
+					canonicalName: 'Meetings',
 					noteIds: [],
 					quizzabilityScore: 0.1,
-					isQuizzable: false,
-					originalClusterIds: [],
-					createdAt: Date.now(),
+					clusterId: 'cluster-2',
+					metadata: { createdAt: now, lastUpdated: now },
+					evolutionHistory: [],
 				},
 			];
 
 			const nonQuizzable = filterNonQuizzableConcepts(concepts);
 
 			expect(nonQuizzable).toHaveLength(1);
-			expect(nonQuizzable[0].name).toBe('Meetings');
+			expect(nonQuizzable[0].canonicalName).toBe('Meetings');
+		});
+
+		it('should exclude concepts at threshold (0.4)', () => {
+			const now = Date.now();
+			const concepts: TrackedConcept[] = [
+				{
+					id: '1',
+					canonicalName: 'Borderline',
+					noteIds: [],
+					quizzabilityScore: 0.4,
+					clusterId: 'cluster-1',
+					metadata: { createdAt: now, lastUpdated: now },
+					evolutionHistory: [],
+				},
+			];
+
+			const nonQuizzable = filterNonQuizzableConcepts(concepts);
+			expect(nonQuizzable).toHaveLength(0);
 		});
 	});
 });

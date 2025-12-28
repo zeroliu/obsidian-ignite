@@ -1,22 +1,18 @@
-import type {
-	ClusterSummary,
-	ConceptNamingResult,
-	ConceptSummary,
-	SynonymPattern,
-	MisfitNote,
-} from './types';
+import type { ClusterSummary, ConceptNamingResult, MisfitNote } from './types';
 
 /**
- * System prompt for concept naming
+ * System prompt for concept naming (merged Stage 3 + 3.5)
+ *
+ * This prompt handles both concept naming AND misfit detection in a single call.
  */
 export const CONCEPT_NAMING_SYSTEM_PROMPT = `You are an expert at organizing and naming knowledge concepts from personal notes.
-Your task is to analyze note clusters and assign meaningful concept names.
+Your task is to analyze note clusters and assign meaningful concept names, while also detecting notes that don't belong.
 
 For each cluster, you will:
 1. Assign a canonical concept name (concise, 2-5 words)
 2. Score quizzability (0-1) - how suitable for spaced repetition quiz
-3. Determine if quizzable (some content types are not suitable)
-4. Suggest clusters that should merge (if conceptually the same topic)
+3. Suggest clusters that should merge (if conceptually the same topic)
+4. Identify misfit notes that don't belong in this cluster
 
 Guidelines for naming:
 - Use clear, descriptive names (e.g., "React Hooks", "Golf Swing Mechanics")
@@ -28,27 +24,14 @@ Guidelines for quizzability:
 - HIGH (0.7-1.0): Technical concepts, learning notes, how-to guides, reference material
 - MEDIUM (0.4-0.7): Project notes, research, mixed content
 - LOW (0.1-0.4): Personal reflections, brainstorming
-- NOT QUIZZABLE: Meeting notes, daily journals, to-do lists, ephemeral content
+- NOT QUIZZABLE (<0.4): Meeting notes, daily journals, to-do lists, ephemeral content
 
-Output JSON format only, no additional text.`;
+Guidelines for misfit detection:
+- A note is a misfit if its topic doesn't match the cluster theme
+- Examples: a grocery list in a "Programming" cluster, a recipe in "Work Projects"
+- Be conservative - only flag clear misfits with obvious mismatches
+- Use the note title to determine if it fits
 
-/**
- * System prompt for cluster refinement
- */
-export const CLUSTER_REFINEMENT_SYSTEM_PROMPT = `You are an expert at analyzing knowledge organization and detecting inconsistencies.
-Your task is to identify two types of issues in named concepts:
-
-1. SYNONYM PATTERNS: Concepts that should be merged because they refer to the same topic
-   - Abbreviations: "JS" and "JavaScript", "FW" and "Firework"
-   - Alternative names: "React Hooks" and "Hooks in React"
-   - Subsets: "useState" should merge into "React Hooks"
-
-2. MISFIT NOTES: Notes that don't belong in their current concept
-   - A todo list in a "Programming" concept
-   - A recipe in a "Work Projects" concept
-   - Suggest tags for re-clustering, NOT a target concept
-
-Be conservative - only flag clear issues with high confidence.
 Output JSON format only, no additional text.`;
 
 /**
@@ -82,66 +65,23 @@ Return JSON array with this structure for each cluster:
     "clusterId": "cluster-id",
     "canonicalName": "Concept Name",
     "quizzabilityScore": 0.85,
-    "isQuizzable": true,
     "nonQuizzableReason": null,
-    "suggestedMerges": []
+    "suggestedMerges": [],
+    "misfitNotes": [
+      {
+        "noteId": "path/to/note.md",
+        "reason": "This note is about X but the cluster is about Y"
+      }
+    ]
   }
 ]
 
-If a cluster should merge with another, include the target cluster ID(s) in suggestedMerges.
-If not quizzable, set isQuizzable to false and provide nonQuizzableReason.`;
-}
-
-/**
- * Build user prompt for cluster refinement
- *
- * @param concepts - Concept summaries to refine
- * @returns User prompt string
- */
-export function buildClusterRefinementPrompt(concepts: ConceptSummary[]): string {
-	const conceptCount = concepts.length;
-
-	const conceptDescriptions = concepts
-		.map(
-			(c, i) => `
-## Concept ${i + 1}
-- ID: ${c.conceptId}
-- Name: ${c.name}
-- Sample note titles: ${c.sampleTitles.join(', ') || 'None'}
-- Note count: ${c.noteCount}`,
-		)
-		.join('\n');
-
-	return `Analyze these ${conceptCount} concepts for synonyms and misfits.
-${conceptDescriptions}
-
-Return JSON with this structure:
-{
-  "synonymPatterns": [
-    {
-      "primaryConceptId": "concept-to-keep",
-      "aliasConceptIds": ["concept-to-merge-1", "concept-to-merge-2"],
-      "confidence": 0.95,
-      "reason": "Explanation of why these are synonyms"
-    }
-  ],
-  "misfitNotes": [
-    {
-      "noteId": "note-id",
-      "noteTitle": "Note Title",
-      "currentConceptId": "current-concept-id",
-      "suggestedTags": ["#tag1", "#tag2"],
-      "confidence": 0.8,
-      "reason": "Explanation of why this note doesn't fit"
-    }
-  ]
-}
-
 Guidelines:
-- Only include synonyms with confidence >= 0.8
-- Only include misfits with confidence >= 0.7
-- For misfits, suggest tags that describe where the note SHOULD go, not the target concept
-- If no issues found, return empty arrays`;
+- If a cluster should merge with another, include the target cluster ID(s) in suggestedMerges
+- If quizzabilityScore < 0.4, provide nonQuizzableReason
+- If a note title clearly doesn't fit the cluster theme, add it to misfitNotes
+- Use the note path from sample titles as noteId in misfitNotes
+- If no misfits, use empty array for misfitNotes`;
 }
 
 /**
@@ -171,78 +111,34 @@ export function parseNamingResponse(response: string): ConceptNamingResult[] {
 			throw new Error('Missing or invalid canonicalName');
 		}
 
+		// Parse misfit notes
+		const misfitNotes: MisfitNote[] = [];
+		if (Array.isArray(item.misfitNotes)) {
+			for (const misfit of item.misfitNotes) {
+				if (typeof misfit === 'object' && misfit !== null) {
+					const m = misfit as Record<string, unknown>;
+					if (typeof m.noteId === 'string') {
+						misfitNotes.push({
+							noteId: m.noteId,
+							reason: typeof m.reason === 'string' ? m.reason : '',
+						});
+					}
+				}
+			}
+		}
+
 		return {
 			clusterId: item.clusterId,
 			canonicalName: item.canonicalName,
 			quizzabilityScore: normalizeScore(item.quizzabilityScore),
-			isQuizzable: item.isQuizzable !== false,
 			nonQuizzableReason:
 				typeof item.nonQuizzableReason === 'string' ? item.nonQuizzableReason : undefined,
 			suggestedMerges: Array.isArray(item.suggestedMerges)
 				? item.suggestedMerges.filter((id): id is string => typeof id === 'string')
 				: [],
+			misfitNotes,
 		};
 	});
-}
-
-/**
- * Parse cluster refinement response from LLM
- *
- * @param response - Raw LLM response text
- * @returns Parsed refinement results
- * @throws Error if parsing fails
- */
-export function parseRefinementResponse(response: string): {
-	synonymPatterns: SynonymPattern[];
-	misfitNotes: MisfitNote[];
-} {
-	// Try to extract JSON from response
-	const json = extractJSON(response);
-
-	// Parse as object
-	const parsed = JSON.parse(json);
-
-	if (typeof parsed !== 'object' || parsed === null) {
-		throw new Error('Expected object with synonymPatterns and misfitNotes');
-	}
-
-	// Parse synonym patterns
-	const synonymPatterns: SynonymPattern[] = [];
-	if (Array.isArray(parsed.synonymPatterns)) {
-		for (const item of parsed.synonymPatterns) {
-			if (typeof item.primaryConceptId === 'string' && Array.isArray(item.aliasConceptIds)) {
-				synonymPatterns.push({
-					primaryConceptId: item.primaryConceptId,
-					aliasConceptIds: item.aliasConceptIds.filter(
-						(id: unknown): id is string => typeof id === 'string',
-					),
-					confidence: normalizeScore(item.confidence),
-					reason: typeof item.reason === 'string' ? item.reason : '',
-				});
-			}
-		}
-	}
-
-	// Parse misfit notes
-	const misfitNotes: MisfitNote[] = [];
-	if (Array.isArray(parsed.misfitNotes)) {
-		for (const item of parsed.misfitNotes) {
-			if (typeof item.noteTitle === 'string' && typeof item.currentConceptId === 'string') {
-				misfitNotes.push({
-					noteId: typeof item.noteId === 'string' ? item.noteId : generateNoteId(item.noteTitle),
-					noteTitle: item.noteTitle,
-					currentConceptId: item.currentConceptId,
-					suggestedTags: Array.isArray(item.suggestedTags)
-						? item.suggestedTags.filter((tag: unknown): tag is string => typeof tag === 'string')
-						: [],
-					confidence: normalizeScore(item.confidence),
-					reason: typeof item.reason === 'string' ? item.reason : '',
-				});
-			}
-		}
-	}
-
-	return { synonymPatterns, misfitNotes };
 }
 
 /**
@@ -308,12 +204,8 @@ function normalizeScore(value: unknown): number {
 	return Math.max(0, Math.min(1, value));
 }
 
-/**
- * Generate a note ID from title
- */
-function generateNoteId(title: string): string {
-	return `note-${title
-		.toLowerCase()
-		.replace(/\s+/g, '-')
-		.replace(/[^a-z0-9-]/g, '')}`;
-}
+// ============ Removed Functions ============
+// The following functions have been removed as part of the Stage 3/3.5 merge:
+// - CLUSTER_REFINEMENT_SYSTEM_PROMPT (no longer needed)
+// - buildClusterRefinementPrompt (no longer needed)
+// - parseRefinementResponse (no longer needed)

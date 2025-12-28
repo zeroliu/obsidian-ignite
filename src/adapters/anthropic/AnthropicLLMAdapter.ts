@@ -1,21 +1,12 @@
-import Anthropic from '@anthropic-ai/sdk';
-import type { ILLMProvider } from '@/ports/ILLMProvider';
-import type {
-	ConceptNamingRequest,
-	ConceptNamingResponse,
-	ClusterRefinementRequest,
-	ClusterRefinementResponse,
-	LLMConfig,
-} from '@/domain/llm/types';
-import { DEFAULT_LLM_CONFIG } from '@/domain/llm/types';
 import {
 	CONCEPT_NAMING_SYSTEM_PROMPT,
-	CLUSTER_REFINEMENT_SYSTEM_PROMPT,
 	buildConceptNamingPrompt,
-	buildClusterRefinementPrompt,
 	parseNamingResponse,
-	parseRefinementResponse,
 } from '@/domain/llm/prompts';
+import type { ConceptNamingRequest, ConceptNamingResponse, LLMConfig } from '@/domain/llm/types';
+import { DEFAULT_LLM_CONFIG } from '@/domain/llm/types';
+import type { ILLMProvider } from '@/ports/ILLMProvider';
+import Anthropic from '@anthropic-ai/sdk';
 
 /**
  * Error thrown when LLM API call fails
@@ -33,6 +24,9 @@ export class LLMApiError extends Error {
 
 /**
  * Anthropic Claude API implementation of ILLMProvider
+ *
+ * Handles concept naming with integrated misfit detection.
+ * Stage 3 (naming) and Stage 3.5 (refinement) are merged into a single call.
  */
 export class AnthropicLLMAdapter implements ILLMProvider {
 	private client: Anthropic;
@@ -52,20 +46,6 @@ export class AnthropicLLMAdapter implements ILLMProvider {
 
 		return {
 			results,
-			usage: response.usage,
-		};
-	}
-
-	async refineClustersBatch(request: ClusterRefinementRequest): Promise<ClusterRefinementResponse> {
-		const userPrompt = buildClusterRefinementPrompt(request.concepts);
-
-		const response = await this.callWithRetry(CLUSTER_REFINEMENT_SYSTEM_PROMPT, userPrompt);
-
-		const { synonymPatterns, misfitNotes } = parseRefinementResponse(response.content);
-
-		return {
-			synonymPatterns,
-			misfitNotes,
 			usage: response.usage,
 		};
 	}

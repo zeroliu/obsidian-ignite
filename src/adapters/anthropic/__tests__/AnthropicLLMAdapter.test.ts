@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { ClusterSummary } from '@/domain/llm/types';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AnthropicLLMAdapter, LLMApiError } from '../AnthropicLLMAdapter';
-import type { ClusterSummary, ConceptSummary } from '@/domain/llm/types';
 
 // Mock the Anthropic SDK
 const mockCreate = vi.fn();
@@ -45,8 +45,8 @@ describe('AnthropicLLMAdapter', () => {
 								clusterId: 'cluster-1',
 								canonicalName: 'React Development',
 								quizzabilityScore: 0.9,
-								isQuizzable: true,
 								suggestedMerges: [],
+								misfitNotes: [],
 							},
 						]),
 					},
@@ -83,7 +83,7 @@ describe('AnthropicLLMAdapter', () => {
 				content: [
 					{
 						type: 'text',
-						text: '```json\n[{"clusterId": "c1", "canonicalName": "Test", "quizzabilityScore": 0.5, "isQuizzable": true, "suggestedMerges": []}]\n```',
+						text: '```json\n[{"clusterId": "c1", "canonicalName": "Test", "quizzabilityScore": 0.5, "suggestedMerges": [], "misfitNotes": []}]\n```',
 					},
 				],
 				usage: { input_tokens: 50, output_tokens: 30 },
@@ -108,53 +108,6 @@ describe('AnthropicLLMAdapter', () => {
 		});
 	});
 
-	describe('refineClustersBatch', () => {
-		it('should successfully refine clusters', async () => {
-			const mockResponse = {
-				content: [
-					{
-						type: 'text',
-						text: JSON.stringify({
-							synonymPatterns: [
-								{
-									primaryConceptId: 'concept-1',
-									aliasConceptIds: ['concept-2'],
-									confidence: 0.95,
-									reason: 'JS is JavaScript',
-								},
-							],
-							misfitNotes: [],
-						}),
-					},
-				],
-				usage: { input_tokens: 80, output_tokens: 40 },
-			};
-
-			mockCreate.mockResolvedValueOnce(mockResponse);
-
-			const concepts: ConceptSummary[] = [
-				{
-					conceptId: 'concept-1',
-					name: 'JavaScript',
-					sampleTitles: ['ES6 Features'],
-					noteCount: 20,
-				},
-				{
-					conceptId: 'concept-2',
-					name: 'JS Tutorials',
-					sampleTitles: ['JS Basics'],
-					noteCount: 10,
-				},
-			];
-
-			const result = await adapter.refineClustersBatch({ concepts });
-
-			expect(result.synonymPatterns).toHaveLength(1);
-			expect(result.synonymPatterns[0].primaryConceptId).toBe('concept-1');
-			expect(result.misfitNotes).toHaveLength(0);
-		});
-	});
-
 	describe('retry logic', () => {
 		it('should retry on 429 rate limit error', async () => {
 			// First call fails with rate limit
@@ -165,7 +118,7 @@ describe('AnthropicLLMAdapter', () => {
 				content: [
 					{
 						type: 'text',
-						text: '[{"clusterId": "c1", "canonicalName": "Test", "quizzabilityScore": 0.5, "isQuizzable": true, "suggestedMerges": []}]',
+						text: '[{"clusterId": "c1", "canonicalName": "Test", "quizzabilityScore": 0.5, "suggestedMerges": [], "misfitNotes": []}]',
 					},
 				],
 				usage: { input_tokens: 50, output_tokens: 30 },
@@ -194,7 +147,7 @@ describe('AnthropicLLMAdapter', () => {
 				content: [
 					{
 						type: 'text',
-						text: '[{"clusterId": "c1", "canonicalName": "Test", "quizzabilityScore": 0.5, "isQuizzable": true, "suggestedMerges": []}]',
+						text: '[{"clusterId": "c1", "canonicalName": "Test", "quizzabilityScore": 0.5, "suggestedMerges": [], "misfitNotes": []}]',
 					},
 				],
 				usage: { input_tokens: 50, output_tokens: 30 },

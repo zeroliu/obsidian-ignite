@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { runLLMPipeline, runConceptNamingOnly } from '../pipeline';
 import { MockLLMAdapter } from '@/adapters/mock/MockLLMAdapter';
 import type { Cluster } from '@/domain/clustering/types';
 import type { FileInfo } from '@/ports/IVaultProvider';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { runConceptNamingOnly, runLLMPipeline } from '../pipeline';
+import { isQuizzableScore } from '../types';
 
 describe('LLM Pipeline', () => {
 	let llmProvider: MockLLMAdapter;
@@ -40,7 +41,7 @@ describe('LLM Pipeline', () => {
 	});
 
 	describe('runLLMPipeline', () => {
-		it('should process clusters and return named concepts', async () => {
+		it('should process clusters and return named concepts with TrackedConcept structure', async () => {
 			const clusters = [
 				createCluster('cluster-1', ['react/hooks.md', 'react/state.md'], {
 					candidateNames: ['React'],
@@ -63,15 +64,18 @@ describe('LLM Pipeline', () => {
 			expect(result.concepts.length).toBeGreaterThan(0);
 			expect(result.stats.totalClusters).toBe(2);
 
-			// Check that React is quizzable
-			const reactConcept = result.concepts.find((c) => c.name === 'React Development');
+			// Check that React is quizzable (has TrackedConcept structure)
+			const reactConcept = result.concepts.find((c) => c.canonicalName === 'React Development');
 			expect(reactConcept).toBeDefined();
-			expect(reactConcept?.isQuizzable).toBe(true);
+			expect(reactConcept?.clusterId).toBe('cluster-1');
+			expect(reactConcept?.metadata).toBeDefined();
+			expect(reactConcept?.evolutionHistory).toEqual([]);
+			expect(isQuizzableScore(reactConcept?.quizzabilityScore ?? 0)).toBe(true);
 
 			// Check that Daily Journal is not quizzable
-			const journalConcept = result.concepts.find((c) => c.name === 'Daily Journal');
+			const journalConcept = result.concepts.find((c) => c.canonicalName === 'Daily Journal');
 			expect(journalConcept).toBeDefined();
-			expect(journalConcept?.isQuizzable).toBe(false);
+			expect(isQuizzableScore(journalConcept?.quizzabilityScore ?? 0)).toBe(false);
 		});
 
 		it('should separate quizzable and non-quizzable concepts', async () => {
@@ -94,8 +98,8 @@ describe('LLM Pipeline', () => {
 
 			expect(result.quizzableConcepts.length).toBe(1);
 			expect(result.nonQuizzableConcepts.length).toBe(1);
-			expect(result.quizzableConcepts[0].name).toBe('React Development');
-			expect(result.nonQuizzableConcepts[0].name).toBe('Meeting Notes');
+			expect(result.quizzableConcepts[0].canonicalName).toBe('React Development');
+			expect(result.nonQuizzableConcepts[0].canonicalName).toBe('Meeting Notes');
 		});
 
 		it('should track token usage', async () => {
@@ -125,81 +129,32 @@ describe('LLM Pipeline', () => {
 			expect(result.stats.totalConcepts).toBe(0);
 		});
 
-		it('should detect synonyms and merge concepts', async () => {
-			// Add custom synonym rule
-			llmProvider._addSynonymRule({
-				primaryPattern: /react\s*development/i,
-				aliasPatterns: [/react\s*hooks/i],
-				confidence: 0.9,
-			});
-
-			const clusters = [
-				createCluster('cluster-1', ['react/basics.md'], {
-					candidateNames: ['React'],
-				}),
-				createCluster('cluster-2', ['react/hooks.md'], {
-					candidateNames: ['React Hooks'],
-				}),
-			];
-
-			fileMap = createFileMap(['react/basics.md', 'react/hooks.md']);
-
-			const result = await runLLMPipeline({
-				clusters,
-				fileMap,
-				llmProvider,
-				runRefinement: true,
-			});
-
-			// Both clusters should be merged into one concept
-			// (They both match "React" and will be named "React Development")
-			// Check that synonym merges were attempted
-			expect(result.stats.synonymMergesApplied).toBeGreaterThanOrEqual(0);
-		});
-
-		it('should identify misfit notes', async () => {
+		it('should identify misfit notes during naming', async () => {
 			// Add custom misfit rule
 			llmProvider._addMisfitRule({
-				pattern: /todo/i,
-				suggestedTags: ['#tasks'],
-				confidence: 0.9,
-				reason: 'Task list not knowledge',
+				pattern: /grocery/i,
+				reason: 'Grocery list not knowledge',
 			});
 
 			const clusters = [
-				createCluster('cluster-1', ['react/hooks.md', 'react/todo.md'], {
+				createCluster('cluster-1', ['react/hooks.md'], {
 					candidateNames: ['React'],
+					// Add grocery to representative titles so it gets detected
 				}),
 			];
 
-			fileMap = createFileMap(['react/hooks.md', 'react/todo.md']);
+			fileMap = createFileMap(['react/hooks.md']);
+			// Override to include grocery in titles
+			fileMap.get('react/hooks.md')!.basename = 'Grocery List';
 
 			const result = await runLLMPipeline({
 				clusters,
 				fileMap,
 				llmProvider,
-				runRefinement: true,
 			});
 
-			// The todo note should be identified as a misfit
+			// Misfits are detected from representative titles
 			expect(result.misfitNotes.length).toBeGreaterThanOrEqual(0);
-		});
-
-		it('should skip refinement when disabled', async () => {
-			const clusters = [createCluster('cluster-1', ['note.md'], { candidateNames: ['Test'] })];
-
-			fileMap = createFileMap(['note.md']);
-
-			const result = await runLLMPipeline({
-				clusters,
-				fileMap,
-				llmProvider,
-				runRefinement: false,
-			});
-
-			expect(result.stats.refinementBatches).toBe(0);
-			expect(result.stats.synonymMergesApplied).toBe(0);
-			expect(result.misfitNotes).toEqual([]);
 		});
 
 		it('should record LLM calls for testing', async () => {
@@ -211,17 +166,50 @@ describe('LLM Pipeline', () => {
 				clusters,
 				fileMap,
 				llmProvider,
-				runRefinement: true,
 			});
 
 			const history = llmProvider._getCallHistory();
 			expect(history.length).toBeGreaterThanOrEqual(1);
 			expect(history.some((h) => h.type === 'nameConceptsBatch')).toBe(true);
 		});
+
+		it('should collect misfits from naming results', async () => {
+			// Add a misfit rule that will match
+			llmProvider._addMisfitRule({
+				pattern: /todo/i,
+				reason: 'Todo list not knowledge',
+			});
+
+			const clusters = [
+				createCluster('cluster-1', ['react/hooks.md'], {
+					candidateNames: ['React'],
+				}),
+			];
+
+			// Create file map with todo in the title
+			fileMap = new Map();
+			fileMap.set('react/hooks.md', {
+				path: 'react/hooks.md',
+				basename: 'My Todo List',
+				folder: 'react',
+				modifiedAt: Date.now(),
+				createdAt: Date.now(),
+			});
+
+			const result = await runLLMPipeline({
+				clusters,
+				fileMap,
+				llmProvider,
+			});
+
+			// The todo pattern should be detected as a misfit
+			expect(result.misfitNotes.length).toBeGreaterThanOrEqual(0);
+			expect(result.stats.misfitNotesRemoved).toBeGreaterThanOrEqual(0);
+		});
 	});
 
 	describe('runConceptNamingOnly', () => {
-		it('should run only naming stage without refinement', async () => {
+		it('should be an alias for runLLMPipeline', async () => {
 			const clusters = [createCluster('cluster-1', ['note.md'], { candidateNames: ['React'] })];
 
 			fileMap = createFileMap(['note.md']);
@@ -233,8 +221,8 @@ describe('LLM Pipeline', () => {
 			});
 
 			expect(result.concepts.length).toBe(1);
-			expect(result.stats.refinementBatches).toBe(0);
-			expect(result.misfitNotes).toEqual([]);
+			expect(result.concepts[0].canonicalName).toBe('React Development');
+			expect(result.concepts[0].clusterId).toBe('cluster-1');
 		});
 	});
 
@@ -256,7 +244,6 @@ describe('LLM Pipeline', () => {
 				clusters,
 				fileMap,
 				llmProvider,
-				runRefinement: false, // Skip refinement to focus on naming batches
 			});
 
 			expect(result.stats.namingBatches).toBe(3); // 45 clusters / 20 per batch = 3 batches

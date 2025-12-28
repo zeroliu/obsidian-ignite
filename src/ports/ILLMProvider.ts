@@ -1,29 +1,26 @@
-import type {
-	ConceptNamingRequest,
-	ConceptNamingResponse,
-	ClusterRefinementRequest,
-	ClusterRefinementResponse,
-	LLMConfig,
-} from '@/domain/llm/types';
+import type { ConceptNamingRequest, ConceptNamingResponse, LLMConfig } from '@/domain/llm/types';
 
 /**
  * Port interface for LLM operations
- * Abstracts away specific LLM providers (Claude, OpenAI, etc.) for testability
+ *
+ * Abstracts away specific LLM providers (Claude, OpenAI, etc.) for testability.
+ * Stage 3 (naming) and Stage 3.5 (refinement) are merged into a single stage.
+ * Misfit detection is now part of the naming response.
  */
 export interface ILLMProvider {
 	/**
 	 * Process a batch of clusters for concept naming
+	 *
+	 * The naming response includes:
+	 * - Canonical concept names
+	 * - Quizzability scores
+	 * - Suggested merges for similar concepts
+	 * - Misfit notes that don't belong to their clusters
+	 *
 	 * @param request - Cluster summaries to name
-	 * @returns Promise resolving to naming results
+	 * @returns Promise resolving to naming results with misfits
 	 */
 	nameConceptsBatch(request: ConceptNamingRequest): Promise<ConceptNamingResponse>;
-
-	/**
-	 * Process a batch of concepts for refinement (synonym detection, misfit identification)
-	 * @param request - Concepts to analyze
-	 * @returns Promise resolving to refinement results
-	 */
-	refineClustersBatch(request: ClusterRefinementRequest): Promise<ClusterRefinementResponse>;
 
 	/**
 	 * Get current LLM configuration
