@@ -4,11 +4,10 @@ import { VoyageEmbeddingAdapter } from '../VoyageEmbeddingAdapter';
 describe('VoyageEmbeddingAdapter', () => {
 	let adapter: VoyageEmbeddingAdapter;
 	const originalFetch = global.fetch;
-	let mockFetch: ReturnType<typeof vi.fn>;
+	const mockFetch = vi.fn();
 
 	beforeAll(() => {
-		mockFetch = vi.fn();
-		global.fetch = mockFetch;
+		global.fetch = mockFetch as unknown as typeof fetch;
 	});
 
 	afterAll(() => {
@@ -116,6 +115,56 @@ describe('VoyageEmbeddingAdapter', () => {
 			expect(result.embeddings).toHaveLength(0);
 			expect(result.totalTokens).toBe(0);
 			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
+		it('should exclude empty texts from results', async () => {
+			mockSuccessResponse([[0.1, 0.2, 0.3]]);
+
+			const result = await adapter.embedBatch([
+				{ notePath: 'empty.md', text: '' },
+				{ notePath: 'content.md', text: 'Real content' },
+				{ notePath: 'whitespace.md', text: '   ' },
+			]);
+
+			expect(result.embeddings).toHaveLength(1);
+			expect(result.embeddings[0].notePath).toBe('content.md');
+		});
+
+		it('should handle all empty texts', async () => {
+			const result = await adapter.embedBatch([
+				{ notePath: 'empty1.md', text: '' },
+				{ notePath: 'empty2.md', text: '  ' },
+			]);
+
+			expect(result.embeddings).toHaveLength(0);
+			expect(result.totalTokens).toBe(0);
+			expect(result.usage.apiCalls).toBe(0);
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
+		it('should handle mixed empty and non-empty texts in batches', async () => {
+			const smallBatchAdapter = new VoyageEmbeddingAdapter({
+				apiKey: 'test-key',
+				batchSize: 2,
+			});
+
+			mockSuccessResponse([[0.1], [0.2]], 50);
+			mockSuccessResponse([[0.3]], 25);
+
+			const result = await smallBatchAdapter.embedBatch([
+				{ notePath: 'note1.md', text: 'Content one' },
+				{ notePath: 'empty.md', text: '' },
+				{ notePath: 'note2.md', text: 'Content two' },
+				{ notePath: 'note3.md', text: 'Content three' },
+			]);
+
+			expect(result.embeddings).toHaveLength(3);
+			expect(result.embeddings.map((e) => e.notePath)).toEqual([
+				'note1.md',
+				'note2.md',
+				'note3.md',
+			]);
+			expect(result.usage.apiCalls).toBe(2);
 		});
 
 		it('should split large batches', async () => {

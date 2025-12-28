@@ -1,3 +1,4 @@
+import { filterEmptyTexts } from '@/domain/embedding/filterEmptyTexts';
 import { estimateTokens } from '@/domain/embedding/tokenUtils';
 import type {
 	BatchEmbeddingResult,
@@ -68,13 +69,26 @@ export class OpenAIEmbeddingAdapter implements IEmbeddingProvider {
 			};
 		}
 
+		// Filter out empty texts - OpenAI API rejects empty strings and they
+		// produce meaningless embeddings anyway
+		const { nonEmptyTexts } = filterEmptyTexts(texts);
+
+		// If all texts are empty, return early with no embeddings
+		if (nonEmptyTexts.length === 0) {
+			return {
+				embeddings: [],
+				totalTokens: 0,
+				usage: { totalTokens: 0, estimatedCost: 0, apiCalls: 0 },
+			};
+		}
+
 		const results: EmbeddingResult[] = [];
 		let totalTokens = 0;
 		let apiCalls = 0;
 
-		// Process in batches
-		for (let i = 0; i < texts.length; i += this.config.batchSize) {
-			const batch = texts.slice(i, i + this.config.batchSize);
+		// Process non-empty texts in batches
+		for (let i = 0; i < nonEmptyTexts.length; i += this.config.batchSize) {
+			const batch = nonEmptyTexts.slice(i, i + this.config.batchSize);
 			const batchResult = await this.embedBatchWithRetry(batch);
 
 			results.push(...batchResult.embeddings);

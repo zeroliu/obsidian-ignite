@@ -38,3 +38,7 @@ export type {
 	NoteForEmbedding,
 } from './embedBatch';
 export { DEFAULT_ORCHESTRATOR_CONFIG, EmbeddingOrchestrator } from './embedBatch';
+
+// Empty text filtering
+export type { FilteredEmbeddingInputs } from './filterEmptyTexts';
+export { filterEmptyTexts } from './filterEmptyTexts';

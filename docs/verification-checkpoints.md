@@ -1,6 +1,7 @@
 # Verification Checkpoints for BERTopic Pipeline
 
 This document defines a repeatable testing process with 6 checkpoints. Each checkpoint has:
+
 - **Artifact**: A concrete output file or test result
 - **Verification**: Commands to run
 - **Pass Criteria**: What success looks like
@@ -39,6 +40,7 @@ TEST_VAULT_PATH=~/Documents/MyVault OPENAI_API_KEY=xxx npx tsx scripts/...
 **Artifact:** Unit test results (all passing)
 
 **Commands:**
+
 ```bash
 # Run all embedding domain tests
 npm run test -- src/domain/embedding/
@@ -51,11 +53,12 @@ npm run typecheck
 ```
 
 **Pass Criteria:**
-- [ ] All tests pass
-- [ ] `prepareText` tests cover: YAML frontmatter, code blocks, images, CJK, truncation
-- [ ] `cache` tests cover: content hash stability, hit/miss, invalidation, chunking
-- [ ] `embedBatch` tests cover: cache integration, progress callbacks, partial failures
-- [ ] No type errors
+
+- [x] All tests pass
+- [x] `prepareText` tests cover: YAML frontmatter, code blocks, images, CJK, truncation
+- [x] `cache` tests cover: content hash stability, hit/miss, invalidation, chunking
+- [x] `embedBatch` tests cover: cache integration, progress callbacks, partial failures
+- [x] No type errors
 
 ---
 
@@ -89,6 +92,7 @@ interface EmbeddingTestOutput {
 ```
 
 **Commands:**
+
 ```bash
 # Unit tests
 npm run test -- src/adapters/openai/
@@ -100,9 +104,10 @@ npx tsx scripts/test-embedding-provider.ts --provider voyage --limit 20
 ```
 
 **Pass Criteria:**
-- [ ] Unit tests pass (mocked SDK)
-- [ ] Script runs without API errors
-- [ ] Output JSON shows:
+
+- [x] Unit tests pass (mocked SDK)
+- [x] Script runs without API errors
+- [x] Output JSON shows:
   - Correct dimensions (1536 for OpenAI, 512 for Voyage)
   - Token count > 0 for each note
   - Reasonable cost estimate
@@ -122,7 +127,7 @@ interface ClusteringV2Output {
   stats: {
     totalNotes: number;
     clusteredNotes: number;
-    noiseNotes: number;    // HDBSCAN label -1
+    noiseNotes: number; // HDBSCAN label -1
     stubNotes: number;
     clusterCount: number;
     avgClusterSize: number;
@@ -148,6 +153,7 @@ interface ClusteringV2Output {
 ```
 
 **Commands:**
+
 ```bash
 # Unit tests
 npm run test -- src/domain/clustering/
@@ -157,6 +163,7 @@ npx tsx scripts/run-clustering.ts
 ```
 
 **Pass Criteria:**
+
 - [ ] Unit tests pass
 - [ ] `clusterCount > 0`
 - [ ] `clusteredNotes + noiseNotes + stubNotes == totalNotes` (no notes lost)
@@ -172,6 +179,7 @@ npx tsx scripts/run-clustering.ts
 **Artifact:** `outputs/vault-concepts-v2.json`
 
 **Commands:**
+
 ```bash
 # Unit tests
 npm run test -- src/domain/llm/
@@ -186,6 +194,7 @@ ANTHROPIC_API_KEY=xxx npx tsx scripts/refine-clusters-llm.ts \
 ```
 
 **Output Structure:**
+
 ```typescript
 interface ConceptsOutput {
   stats: {
@@ -193,19 +202,19 @@ interface ConceptsOutput {
     quizzableConceptCount: number;
     nonQuizzableConceptCount: number;
     misfitNotesRemoved: number;
-    tokenUsage: { inputTokens: number; outputTokens: number };
+    tokenUsage: {inputTokens: number; outputTokens: number};
   };
   concepts: Array<{
     id: string;
-    canonicalName: string;        // NOT "name"
-    clusterId: string;            // NOT "originalClusterIds[]"
+    canonicalName: string; // NOT "name"
+    clusterId: string; // NOT "originalClusterIds[]"
     noteIds: string[];
     quizzabilityScore: number;
     metadata: {
       createdAt: number;
       lastUpdated: number;
     };
-    evolutionHistory: [];         // Empty for new concepts
+    evolutionHistory: []; // Empty for new concepts
   }>;
   misfitNotes: Array<{
     noteId: string;
@@ -215,6 +224,7 @@ interface ConceptsOutput {
 ```
 
 **Pass Criteria:**
+
 - [ ] Unit tests pass
 - [ ] No type errors
 - [ ] Output uses new type structure:
@@ -267,6 +277,7 @@ interface EvolutionTestOutput {
 ```
 
 **Commands:**
+
 ```bash
 # Unit tests
 npm run test -- src/domain/evolution/
@@ -287,6 +298,7 @@ npx tsx scripts/test-evolution.ts \
 ```
 
 **Pass Criteria:**
+
 - [ ] Unit tests pass
 - [ ] Evolution types correctly detected:
   - `rename` when overlap > 60%
@@ -308,10 +320,15 @@ npx tsx scripts/test-evolution.ts \
 ```typescript
 interface FullPipelineOutput {
   stages: {
-    vaultRead: { noteCount: number; durationMs: number };
-    embedding: { processed: number; cached: number; tokens: number; durationMs: number };
-    clustering: { clusterCount: number; noiseCount: number; durationMs: number };
-    llmNaming: { conceptCount: number; tokens: number; durationMs: number };
+    vaultRead: {noteCount: number; durationMs: number};
+    embedding: {
+      processed: number;
+      cached: number;
+      tokens: number;
+      durationMs: number;
+    };
+    clustering: {clusterCount: number; noiseCount: number; durationMs: number};
+    llmNaming: {conceptCount: number; tokens: number; durationMs: number};
   };
   finalResult: {
     concepts: TrackedConcept[];
@@ -322,6 +339,7 @@ interface FullPipelineOutput {
 ```
 
 **Commands:**
+
 ```bash
 # Pre-flight checks
 npm run typecheck
@@ -333,6 +351,7 @@ npx tsx scripts/run-full-pipeline.ts
 ```
 
 **Pass Criteria:**
+
 - [ ] No type errors
 - [ ] All tests pass
 - [ ] Build succeeds (`main.js` generated)
@@ -346,31 +365,32 @@ npx tsx scripts/run-full-pipeline.ts
 
 ## Quick Reference
 
-| Checkpoint | Milestones | Artifact | Main Command |
-|------------|------------|----------|--------------|
-| 1 | M1-M4 | test pass | `npm test -- src/domain/embedding/` |
-| 2 | M5-M6 | `embedding-provider-test.json` | `test-embedding-provider.ts` |
-| 3 | M7-M10 | `vault-clusters-v2.json` | `run-clustering.ts` |
-| 4 | M11 | `vault-concepts-v2.json` | `refine-clusters-llm.ts` |
-| 5 | M12 | `evolution-test.json` | `test-evolution.ts` |
-| 6 | M13 | clean build | `npm run build` |
+| Checkpoint | Milestones | Artifact                       | Main Command                        |
+| ---------- | ---------- | ------------------------------ | ----------------------------------- |
+| 1          | M1-M4      | test pass                      | `npm test -- src/domain/embedding/` |
+| 2          | M5-M6      | `embedding-provider-test.json` | `test-embedding-provider.ts`        |
+| 3          | M7-M10     | `vault-clusters-v2.json`       | `run-clustering.ts`                 |
+| 4          | M11        | `vault-concepts-v2.json`       | `refine-clusters-llm.ts`            |
+| 5          | M12        | `evolution-test.json`          | `test-evolution.ts`                 |
+| 6          | M13        | clean build                    | `npm run build`                     |
 
 ---
 
 ## Scripts Summary
 
-| Script | Purpose | Inputs | Outputs |
-|--------|---------|--------|---------|
-| `test-embedding-provider.ts` | Test real embedding APIs | `TEST_VAULT_PATH` env, provider, limit | `embedding-provider-test.json` |
-| `run-clustering.ts` | Run embedding-based clustering | `TEST_VAULT_PATH` env | `vault-clusters-v2.json` |
-| `test-evolution.ts` | Test cluster evolution detection | old/new clusters, concepts | `evolution-test.json` |
-| `run-full-pipeline.ts` | End-to-end pipeline | `TEST_VAULT_PATH` env | `full-pipeline-run.json` |
+| Script                       | Purpose                          | Inputs                                 | Outputs                        |
+| ---------------------------- | -------------------------------- | -------------------------------------- | ------------------------------ |
+| `test-embedding-provider.ts` | Test real embedding APIs         | `TEST_VAULT_PATH` env, provider, limit | `embedding-provider-test.json` |
+| `run-clustering.ts`          | Run embedding-based clustering   | `TEST_VAULT_PATH` env                  | `vault-clusters-v2.json`       |
+| `test-evolution.ts`          | Test cluster evolution detection | old/new clusters, concepts             | `evolution-test.json`          |
+| `run-full-pipeline.ts`       | End-to-end pipeline              | `TEST_VAULT_PATH` env                  | `full-pipeline-run.json`       |
 
 ---
 
 ## Output Directory
 
 All artifacts go to `outputs/` directory:
+
 ```
 outputs/
 ├── embedding-provider-test.json    # Checkpoint 2

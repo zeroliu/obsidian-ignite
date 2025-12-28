@@ -13,14 +13,14 @@ function createAPIError(status: number, message: string): Error & { status: numb
 	return error;
 }
 
-// Mock OpenAI module
+// Mock OpenAI module with a class (required for Vitest 4.x)
 vi.mock('openai', () => {
 	return {
-		default: vi.fn().mockImplementation(() => ({
-			embeddings: {
+		default: class MockOpenAI {
+			embeddings = {
 				create: mockCreate,
-			},
-		})),
+			};
+		},
 	};
 });
 
@@ -112,6 +112,69 @@ describe('OpenAIEmbeddingAdapter', () => {
 			expect(result.embeddings).toHaveLength(0);
 			expect(result.totalTokens).toBe(0);
 			expect(mockCreate).not.toHaveBeenCalled();
+		});
+
+		it('should exclude empty texts from results', async () => {
+			mockEmbeddingResponse([[0.1, 0.2, 0.3]]);
+
+			const result = await adapter.embedBatch([
+				{ notePath: 'empty.md', text: '' },
+				{ notePath: 'content.md', text: 'Real content' },
+				{ notePath: 'whitespace.md', text: '   ' },
+			]);
+
+			expect(result.embeddings).toHaveLength(1);
+			expect(result.embeddings[0].notePath).toBe('content.md');
+			expect(mockCreate).toHaveBeenCalledWith({
+				model: 'text-embedding-3-small',
+				input: ['Real content'],
+			});
+		});
+
+		it('should handle all empty texts', async () => {
+			const result = await adapter.embedBatch([
+				{ notePath: 'empty1.md', text: '' },
+				{ notePath: 'empty2.md', text: '  ' },
+			]);
+
+			expect(result.embeddings).toHaveLength(0);
+			expect(result.totalTokens).toBe(0);
+			expect(result.usage.apiCalls).toBe(0);
+			expect(mockCreate).not.toHaveBeenCalled();
+		});
+
+		it('should handle mixed empty and non-empty texts in batches', async () => {
+			const smallBatchAdapter = new OpenAIEmbeddingAdapter({
+				apiKey: 'test-key',
+				batchSize: 2,
+			});
+
+			mockCreate.mockResolvedValueOnce({
+				data: [
+					{ embedding: [0.1], index: 0 },
+					{ embedding: [0.2], index: 1 },
+				],
+				usage: { total_tokens: 50 },
+			});
+			mockCreate.mockResolvedValueOnce({
+				data: [{ embedding: [0.3], index: 0 }],
+				usage: { total_tokens: 25 },
+			});
+
+			const result = await smallBatchAdapter.embedBatch([
+				{ notePath: 'note1.md', text: 'Content one' },
+				{ notePath: 'empty.md', text: '' },
+				{ notePath: 'note2.md', text: 'Content two' },
+				{ notePath: 'note3.md', text: 'Content three' },
+			]);
+
+			expect(result.embeddings).toHaveLength(3);
+			expect(result.embeddings.map((e) => e.notePath)).toEqual([
+				'note1.md',
+				'note2.md',
+				'note3.md',
+			]);
+			expect(result.usage.apiCalls).toBe(2);
 		});
 
 		it('should split large batches', async () => {

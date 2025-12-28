@@ -5,13 +5,14 @@ import { AnthropicLLMAdapter, LLMApiError } from '../AnthropicLLMAdapter';
 // Mock the Anthropic SDK
 const mockCreate = vi.fn();
 
+// Mock Anthropic module with a class (required for Vitest 4.x)
 vi.mock('@anthropic-ai/sdk', () => {
 	return {
-		default: vi.fn().mockImplementation(() => ({
-			messages: {
+		default: class MockAnthropic {
+			messages = {
 				create: mockCreate,
-			},
-		})),
+			};
+		},
 	};
 });
 
