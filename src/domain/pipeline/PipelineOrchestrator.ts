@@ -2,7 +2,7 @@ import { ClusteringPipeline } from '@/domain/clustering/pipeline';
 import { toLegacyCluster } from '@/domain/clustering/types';
 import { EmbeddingCacheManager } from '@/domain/embedding/cache';
 import { EmbeddingOrchestrator } from '@/domain/embedding/embedBatch';
-import { type LLMPipelineResult, runLLMPipeline } from '@/domain/llm/pipeline';
+import { runLLMPipeline } from '@/domain/llm/pipeline';
 import type { IEmbeddingProvider } from '@/ports/IEmbeddingProvider';
 import type { ILLMProvider } from '@/ports/ILLMProvider';
 import type { IMetadataProvider, ResolvedLinks } from '@/ports/IMetadataProvider';
@@ -36,7 +36,7 @@ const CLUSTERS_STORAGE_KEY = 'clusters';
  * 1. Reading - Scan vault for markdown files
  * 2. Embedding - Generate embeddings for notes (with caching)
  * 3. Clustering - UMAP dimensionality reduction + HDBSCAN clustering
- * 4. Refining - LLM concept naming and quizzability scoring (optional)
+ * 4. Refining - LLM concept naming and quizzability scoring
  * 5. Saving - Persist results to .recall/clusters.json
  */
 export class PipelineOrchestrator {
@@ -45,8 +45,8 @@ export class PipelineOrchestrator {
     private metadataProvider: IMetadataProvider,
     private storageAdapter: IStorageAdapter,
     private embeddingProvider: IEmbeddingProvider,
+    private llmProvider: ILLMProvider,
     private excludePatterns: string[] = [],
-    private llmProvider: ILLMProvider | null = null,
   ) {}
 
   /**
@@ -80,7 +80,13 @@ export class PipelineOrchestrator {
         noiseCount: 0,
         excludedCount,
         embeddingStats: { cacheHits: 0, cacheMisses: 0, tokensProcessed: 0, estimatedCost: 0 },
-        llmStats: null,
+        llmStats: {
+          conceptsNamed: 0,
+          quizzableCount: 0,
+          nonQuizzableCount: 0,
+          misfitNotesCount: 0,
+          tokenUsage: { inputTokens: 0, outputTokens: 0 },
+        },
         timing: {
           embeddingMs: 0,
           clusteringMs: 0,
@@ -145,49 +151,40 @@ export class PipelineOrchestrator {
       `Found ${clusteringResult.result.clusters.length} clusters`,
     );
 
-    // Stage 4: LLM Refining (optional)
-    let llmResult: LLMPipelineResult | null = null;
-    let refiningMs = 0;
+    // Stage 4: LLM Refining
+    const refiningStartTime = Date.now();
+    this.reportProgress(onProgress, 'refining', 0, 1, 'Naming concepts with LLM...');
 
-    if (this.llmProvider !== null) {
-      const refiningStartTime = Date.now();
-      this.reportProgress(onProgress, 'refining', 0, 1, 'Naming concepts with LLM...');
+    const clustersForLLM = clusteringResult.result.clusters.map(toLegacyCluster);
+    const llmResult = await runLLMPipeline({
+      clusters: clustersForLLM,
+      fileMap: files,
+      llmProvider: this.llmProvider,
+    });
 
-      try {
-        const clustersForLLM = clusteringResult.result.clusters.map(toLegacyCluster);
-        llmResult = await runLLMPipeline({
-          clusters: clustersForLLM,
-          fileMap: files,
-          llmProvider: this.llmProvider,
-        });
-        this.reportProgress(
-          onProgress,
-          'refining',
-          1,
-          1,
-          `Named ${llmResult.stats.totalConcepts} concepts`,
-        );
-      } catch (error) {
-        console.warn('LLM refinement failed:', error);
-        this.reportProgress(onProgress, 'refining', 0, 1, 'LLM refinement failed');
-      }
+    this.reportProgress(
+      onProgress,
+      'refining',
+      1,
+      1,
+      `Named ${llmResult.stats.totalConcepts} concepts`,
+    );
 
-      refiningMs = Date.now() - refiningStartTime;
-    }
+    const refiningMs = Date.now() - refiningStartTime;
 
     // Stage 5: Saving results
     this.reportProgress(onProgress, 'saving', 0, 1, 'Saving results...');
 
     // Build concept lookup map for merging LLM results
-    const conceptMap = new Map(llmResult?.concepts.map((c) => [c.clusterId, c]) ?? []);
+    const conceptMap = new Map(llmResult.concepts.map((c) => [c.clusterId, c]));
 
     const serializedClusters = clusteringResult.result.clusters.map((cluster) => {
       const base = serializeCluster(cluster);
-      return applyLLMResultsToCluster(
-        base,
-        conceptMap.get(cluster.id),
-        llmResult?.misfitNotes ?? [],
-      );
+      const concept = conceptMap.get(cluster.id);
+      if (!concept) {
+        throw new Error(`No concept found for cluster ${cluster.id}`);
+      }
+      return applyLLMResultsToCluster(base, concept, llmResult.misfitNotes);
     });
 
     const persistedResult: PersistedClusteringResult = {
@@ -198,9 +195,8 @@ export class PipelineOrchestrator {
       noiseNotes: clusteringResult.result.noiseNotes,
       embeddingProvider: this.embeddingProvider.getProviderName(),
       embeddingModel: this.embeddingProvider.getModelName(),
-      llmRefined: llmResult !== null,
-      llmModel: llmResult !== null ? this.llmProvider?.getConfig().model : undefined,
-      llmTokenUsage: llmResult?.stats.tokenUsage,
+      llmModel: this.llmProvider.getConfig().model,
+      llmTokenUsage: llmResult.stats.tokenUsage,
     };
 
     await this.storageAdapter.write(CLUSTERS_STORAGE_KEY, persistedResult);
@@ -218,16 +214,13 @@ export class PipelineOrchestrator {
         tokensProcessed: embeddingResult.stats.tokensProcessed,
         estimatedCost: embeddingResult.stats.estimatedCost,
       },
-      llmStats:
-        llmResult !== null
-          ? {
-              conceptsNamed: llmResult.stats.totalConcepts,
-              quizzableCount: llmResult.stats.quizzableConceptCount,
-              nonQuizzableCount: llmResult.stats.nonQuizzableConceptCount,
-              misfitNotesCount: llmResult.stats.misfitNotesRemoved,
-              tokenUsage: llmResult.stats.tokenUsage,
-            }
-          : null,
+      llmStats: {
+        conceptsNamed: llmResult.stats.totalConcepts,
+        quizzableCount: llmResult.stats.quizzableConceptCount,
+        nonQuizzableCount: llmResult.stats.nonQuizzableConceptCount,
+        misfitNotesCount: llmResult.stats.misfitNotesRemoved,
+        tokenUsage: llmResult.stats.tokenUsage,
+      },
       timing: {
         embeddingMs,
         clusteringMs,

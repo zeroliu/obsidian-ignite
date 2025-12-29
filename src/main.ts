@@ -8,7 +8,6 @@ import { OpenAIEmbeddingAdapter } from '@/adapters/openai/OpenAIEmbeddingAdapter
 import { VoyageEmbeddingAdapter } from '@/adapters/voyage/VoyageEmbeddingAdapter';
 import { PipelineOrchestrator, parseExcludePatterns } from '@/domain/pipeline';
 import type { IEmbeddingProvider } from '@/ports/IEmbeddingProvider';
-import type { ILLMProvider } from '@/ports/ILLMProvider';
 import { type AIRecallSettings, AIRecallSettingsTab, DEFAULT_SETTINGS } from '@/settings';
 import { Notice, Plugin } from 'obsidian';
 
@@ -93,11 +92,14 @@ export default class AIRecallPlugin extends Plugin {
       return;
     }
 
-    // Create LLM provider if Anthropic key is configured
-    let llmProvider: ILLMProvider | null = null;
-    if (this.settings.anthropicApiKey) {
-      llmProvider = new AnthropicLLMAdapter(this.settings.anthropicApiKey);
+    // Validate Anthropic API key (required for LLM naming)
+    if (!this.settings.anthropicApiKey) {
+      new Notice('Please configure your Anthropic API key in settings.');
+      return;
     }
+
+    // Create LLM provider
+    const llmProvider = new AnthropicLLMAdapter(this.settings.anthropicApiKey);
 
     // Create adapters
     const vaultAdapter = new ObsidianVaultAdapter(this.app);
@@ -113,8 +115,8 @@ export default class AIRecallPlugin extends Plugin {
       metadataAdapter,
       storageAdapter,
       embeddingProvider,
-      excludePatterns,
       llmProvider,
+      excludePatterns,
     );
 
     // Show status notice

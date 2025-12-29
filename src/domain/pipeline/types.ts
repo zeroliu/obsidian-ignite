@@ -40,15 +40,15 @@ export interface SerializedCluster {
   centroid: number[];
   /** Note paths closest to centroid */
   representativeNotes: string[];
-  // LLM-derived fields (optional - only present after LLM step runs)
+  // LLM-derived fields
   /** Canonical name assigned by LLM */
-  canonicalName?: string;
+  canonicalName: string;
   /** Quizzability score (0-1) from LLM assessment */
-  quizzabilityScore?: number;
+  quizzabilityScore: number;
   /** Reason if not quizzable (score < 0.4) */
   nonQuizzableReason?: string;
   /** Notes identified as misfits for this cluster */
-  misfitNotes?: Array<{ noteId: string; reason: string }>;
+  misfitNotes: Array<{ noteId: string; reason: string }>;
 }
 
 /**
@@ -70,12 +70,10 @@ export interface PersistedClusteringResult {
   /** Embedding model used */
   embeddingModel: string;
   // LLM processing metadata
-  /** Whether LLM refinement was performed */
-  llmRefined?: boolean;
   /** LLM model used for refinement */
-  llmModel?: string;
+  llmModel: string;
   /** Token usage statistics from LLM */
-  llmTokenUsage?: { inputTokens: number; outputTokens: number };
+  llmTokenUsage: { inputTokens: number; outputTokens: number };
 }
 
 /**
@@ -97,14 +95,14 @@ export interface PipelineResult {
     tokensProcessed: number;
     estimatedCost: number;
   };
-  /** LLM statistics (null if LLM step was skipped) */
+  /** LLM statistics */
   llmStats: {
     conceptsNamed: number;
     quizzableCount: number;
     nonQuizzableCount: number;
     misfitNotesCount: number;
     tokenUsage: { inputTokens: number; outputTokens: number };
-  } | null;
+  };
   /** Timing information */
   timing: {
     embeddingMs: number;
@@ -115,9 +113,19 @@ export interface PipelineResult {
 }
 
 /**
- * Convert an EmbeddingCluster to a SerializedCluster for JSON storage
+ * Cluster data without LLM-derived fields (intermediate type during serialization)
  */
-export function serializeCluster(cluster: EmbeddingCluster): SerializedCluster {
+export type BaseSerializedCluster = Omit<
+  SerializedCluster,
+  'canonicalName' | 'quizzabilityScore' | 'misfitNotes' | 'nonQuizzableReason'
+>;
+
+/**
+ * Convert an EmbeddingCluster to base cluster data (without LLM fields)
+ *
+ * Use applyLLMResultsToCluster to add LLM-derived fields and get a full SerializedCluster.
+ */
+export function serializeCluster(cluster: EmbeddingCluster): BaseSerializedCluster {
   return {
     id: cluster.id,
     noteIds: cluster.noteIds,
@@ -138,16 +146,13 @@ export function serializeCluster(cluster: EmbeddingCluster): SerializedCluster {
 export const CLUSTERING_RESULT_VERSION = 1;
 
 /**
- * Apply LLM results to a serialized cluster
+ * Apply LLM results to a base cluster to create a full SerializedCluster
  */
 export function applyLLMResultsToCluster(
-  cluster: SerializedCluster,
-  concept: TrackedConcept | undefined,
+  cluster: BaseSerializedCluster,
+  concept: TrackedConcept,
   misfitNotes: MisfitNote[],
 ): SerializedCluster {
-  if (!concept) {
-    return cluster;
-  }
   return {
     ...cluster,
     canonicalName: concept.canonicalName,
