@@ -219,6 +219,8 @@ export interface QuestionGenerationRequest {
  */
 export interface QuestionGenerationResponse {
   questions: Question[];
+  /** Questions that failed validation during parsing */
+  skipped?: Array<{ item: unknown; reason: string }>;
   usage?: { inputTokens: number; outputTokens: number };
 }
 

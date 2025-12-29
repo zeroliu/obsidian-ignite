@@ -160,30 +160,43 @@ function extractJSON(response: string): string {
 }
 
 /**
- * Validate question format
+ * Valid question formats and difficulties
  */
 const VALID_FORMATS = ['multiple_choice', 'true_false', 'fill_blank', 'free_form'];
 const VALID_DIFFICULTIES = ['easy', 'medium', 'hard'];
 
-function validateQuestion(item: Record<string, unknown>): boolean {
-  if (typeof item.sourceNoteId !== 'string') return false;
-  if (typeof item.question !== 'string') return false;
-  if (!VALID_FORMATS.includes(item.format as string)) return false;
-  if (!VALID_DIFFICULTIES.includes(item.difficulty as string)) return false;
+/**
+ * Result of parsing questions with any validation errors
+ */
+export interface ParseQuestionResult {
+  questions: Question[];
+  skipped: Array<{ item: unknown; reason: string }>;
+}
 
-  // Format-specific validation
+/**
+ * Get validation error reason for a question item
+ */
+function getValidationError(item: Record<string, unknown>): string | null {
+  if (typeof item.sourceNoteId !== 'string') return 'missing or invalid sourceNoteId';
+  if (typeof item.question !== 'string') return 'missing or invalid question text';
+  if (!VALID_FORMATS.includes(item.format as string)) return `invalid format: ${item.format}`;
+  if (!VALID_DIFFICULTIES.includes(item.difficulty as string))
+    return `invalid difficulty: ${item.difficulty}`;
+
   if (item.format === 'multiple_choice') {
-    if (!Array.isArray(item.options) || item.options.length !== 4) return false;
-    if (typeof item.correctAnswer !== 'number') return false;
+    if (!Array.isArray(item.options) || item.options.length !== 4)
+      return 'multiple_choice requires exactly 4 options';
+    if (typeof item.correctAnswer !== 'number') return 'multiple_choice requires numeric answer';
   }
 
-  return true;
+  return null;
 }
 
 /**
  * Parse LLM response into questions
+ * Returns both valid questions and skipped items with reasons
  */
-export function parseQuestionResponse(response: string): Question[] {
+export function parseQuestionResponse(response: string): ParseQuestionResult {
   const json = extractJSON(response);
   const parsed = JSON.parse(json);
 
@@ -192,10 +205,12 @@ export function parseQuestionResponse(response: string): Question[] {
   }
 
   const questions: Question[] = [];
+  const skipped: Array<{ item: unknown; reason: string }> = [];
 
   for (const item of parsed) {
-    if (!validateQuestion(item as Record<string, unknown>)) {
-      console.warn('Skipping invalid question:', item);
+    const error = getValidationError(item as Record<string, unknown>);
+    if (error) {
+      skipped.push({ item, reason: error });
       continue;
     }
 
@@ -214,5 +229,5 @@ export function parseQuestionResponse(response: string): Question[] {
     });
   }
 
-  return questions;
+  return { questions, skipped };
 }

@@ -133,40 +133,75 @@ export function calculateStruggleScore(stats: DerivedNoteStats): number {
 // ============ Cold-Start Scoring ============
 
 /**
+ * Options for cold-start scoring
+ */
+export interface ColdStartOptions {
+  /** Current time for recency calculation */
+  now?: number;
+  /** Random jitter value (0-1). Pass explicit value for deterministic tests. */
+  jitter?: number;
+}
+
+/**
  * Calculate score for never-quizzed notes
  * Uses content-based signals instead of history
+ *
+ * @param note - Note metadata for scoring
+ * @param options - Optional configuration for deterministic testing
  */
 export function calculateColdStartScore(
   note: NoteSelectionInput,
-  now: number = Date.now(),
+  options: ColdStartOptions = {},
 ): number {
+  const now = options.now ?? Date.now();
+  const jitter = options.jitter ?? Math.random();
+
   const structureScore = Math.min(1, note.headingCount * 0.15);
   const linkPopularity = Math.min(1, note.incomingLinkCount / 10);
   const recency = calculateRecencyScore(note.modifiedAt, now);
-  const jitter = Math.random() * 0.2; // Add randomness for variety
+  const jitterScore = jitter * 0.2; // Scale jitter to 0-0.2 range
 
-  return 0.25 * structureScore + 0.25 * linkPopularity + 0.3 * recency + 0.2 * jitter;
+  return 0.25 * structureScore + 0.25 * linkPopularity + 0.3 * recency + 0.2 * jitterScore;
 }
 
 // ============ Main Scoring Function ============
 
 /**
- * Score a single note based on all factors
+ * Options for scoring notes
  */
-export function scoreNote(note: NoteSelectionInput, stats: DerivedNoteStats): NoteScore {
+export interface ScoringOptions {
+  /** Current time for recency calculation */
+  now?: number;
+  /** Random jitter value (0-1) for cold-start. Pass explicit value for deterministic tests. */
+  jitter?: number;
+}
+
+/**
+ * Score a single note based on all factors
+ *
+ * @param note - Note metadata for scoring
+ * @param stats - Derived quiz history stats
+ * @param options - Optional configuration for deterministic testing
+ */
+export function scoreNote(
+  note: NoteSelectionInput,
+  stats: DerivedNoteStats,
+  options: ScoringOptions = {},
+): NoteScore {
   const isNeverQuizzed = stats.quizCount === 0;
+  const now = options.now ?? Date.now();
 
   const factors = {
     spacedRepScore: calculateSpacedRepScore(stats),
     richnessScore: calculateRichnessScore(note.headingCount, note.wordCount),
-    recencyScore: calculateRecencyScore(note.modifiedAt),
+    recencyScore: calculateRecencyScore(note.modifiedAt, now),
     varietyScore: calculateVarietyScore(stats),
     struggleScore: calculateStruggleScore(stats),
   };
 
   // Use cold-start scoring for never-quizzed notes
   const totalScore = isNeverQuizzed
-    ? calculateColdStartScore(note)
+    ? calculateColdStartScore(note, { now: options.now, jitter: options.jitter })
     : WEIGHTS.spacedRep * factors.spacedRepScore +
       WEIGHTS.richness * factors.richnessScore +
       WEIGHTS.recency * factors.recencyScore +

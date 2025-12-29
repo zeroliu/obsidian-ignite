@@ -24,6 +24,7 @@
  *   --notes <n>        Number of notes per concept (default: 15)
  *   --note-ids <ids>   Comma-separated note paths (specific_notes entry point)
  *   --no-cache         Disable question caching
+ *   --dry-run          Test pipeline without LLM calls (uses mock adapter)
  *   --help, -h         Show help
  */
 
@@ -31,7 +32,9 @@ import {createHash} from 'node:crypto';
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {basename, dirname} from 'node:path';
 import {AnthropicLLMAdapter} from '../src/adapters/anthropic/AnthropicLLMAdapter';
+import {MockLLMAdapter} from '../src/adapters/mock/MockLLMAdapter';
 import {InMemoryStorageAdapter} from '../src/adapters/mock/InMemoryStorageAdapter';
+import type {ILLMProvider} from '../src/ports/ILLMProvider';
 import type {NoteSelectionInput, Question} from '../src/domain/question/types';
 import {runQuestionPipeline} from '../src/domain/question/pipeline';
 import {getArg, readVault, requireTestVaultPath, type VaultReadResult} from './lib/vault-helpers';
@@ -175,7 +178,8 @@ interface SpecificNotesModeConfig {
 	noteIds: string[];
 	outputPath: string;
 	cacheEnabled: boolean;
-	anthropicApiKey: string;
+	anthropicApiKey: string | undefined;
+	dryRun: boolean;
 	startTime: number;
 }
 
@@ -203,7 +207,7 @@ interface SpecificNotesOutput {
 }
 
 async function runSpecificNotesMode(config: SpecificNotesModeConfig): Promise<void> {
-	const {vaultPath, noteIds, outputPath, cacheEnabled, anthropicApiKey, startTime} = config;
+	const {vaultPath, noteIds, outputPath, cacheEnabled, anthropicApiKey, dryRun, startTime} = config;
 
 	console.error(`Requested notes: ${noteIds.length}`);
 	for (const noteId of noteIds) {
@@ -244,8 +248,10 @@ async function runSpecificNotesMode(config: SpecificNotesModeConfig): Promise<vo
 	}
 
 	// Initialize LLM adapter and storage
-	console.error('Initializing LLM adapter...');
-	const llmProvider = new AnthropicLLMAdapter(anthropicApiKey);
+	console.error(`Initializing LLM adapter${dryRun ? ' (dry-run mode)' : ''}...`);
+	const llmProvider: ILLMProvider = dryRun
+		? new MockLLMAdapter()
+		: new AnthropicLLMAdapter(anthropicApiKey as string);
 	const storageAdapter = new InMemoryStorageAdapter();
 	const readNote = createReadNote(vault);
 	const getNoteMetadata = createGetNoteMetadata(vault);
@@ -381,6 +387,7 @@ Options:
   --notes <n>        Number of notes per concept (default: 15)
   --note-ids <ids>   Comma-separated note paths for direct generation (specific_notes entry point)
   --no-cache         Disable question caching
+  --dry-run          Test pipeline without LLM calls (uses mock adapter)
   --help, -h         Show help
 
 Examples:
@@ -395,6 +402,9 @@ Examples:
 
   # Disable caching to force regeneration
   npx tsx scripts/run-question-generation.ts --no-cache --limit 1
+
+  # Test pipeline without making LLM calls
+  npx tsx scripts/run-question-generation.ts --dry-run --limit 1
 `);
 		process.exit(0);
 	}
@@ -408,10 +418,11 @@ Examples:
 	const notesPerConcept = parseInt(getArg(args, '--notes') ?? '15', 10);
 	const specificNoteIds = getArg(args, '--note-ids');
 	const cacheEnabled = !args.includes('--no-cache');
+	const dryRun = args.includes('--dry-run');
 
 	const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-	if (!anthropicApiKey) {
-		console.error('Error: ANTHROPIC_API_KEY environment variable required');
+	if (!anthropicApiKey && !dryRun) {
+		console.error('Error: ANTHROPIC_API_KEY environment variable required (or use --dry-run)');
 		process.exit(1);
 	}
 
@@ -420,7 +431,7 @@ Examples:
 
 	console.error('=== Question Generation ===');
 	console.error(`Vault: ${resolvedVaultPath}`);
-	console.error(`Mode: ${isSpecificNotesMode ? 'specific_notes' : 'concept-based'}`);
+	console.error(`Mode: ${isSpecificNotesMode ? 'specific_notes' : 'concept-based'}${dryRun ? ' (dry-run)' : ''}`);
 	console.error(`Cache: ${cacheEnabled ? 'enabled' : 'disabled'}`);
 	console.error('');
 
@@ -434,6 +445,7 @@ Examples:
 			outputPath,
 			cacheEnabled,
 			anthropicApiKey,
+			dryRun,
 			startTime,
 		});
 		return;
@@ -484,8 +496,10 @@ Examples:
 	console.error('');
 
 	// Initialize LLM adapter and storage
-	console.error('Initializing LLM adapter...');
-	const llmProvider = new AnthropicLLMAdapter(anthropicApiKey);
+	console.error(`Initializing LLM adapter${dryRun ? ' (dry-run mode)' : ''}...`);
+	const llmProvider: ILLMProvider = dryRun
+		? new MockLLMAdapter()
+		: new AnthropicLLMAdapter(anthropicApiKey as string);
 	const storageAdapter = new InMemoryStorageAdapter();
 	const readNote = createReadNote(vault);
 	const getNoteMetadata = createGetNoteMetadata(vault);

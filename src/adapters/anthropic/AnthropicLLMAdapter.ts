@@ -66,10 +66,11 @@ export class AnthropicLLMAdapter implements ILLMProvider {
 
     const response = await this.callWithRetry(QUESTION_GENERATION_SYSTEM_PROMPT, userPrompt);
 
-    const questions = parseQuestionResponse(response.content);
+    const { questions, skipped } = parseQuestionResponse(response.content);
 
     return {
       questions,
+      skipped,
       usage: response.usage,
     };
   }

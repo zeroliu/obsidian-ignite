@@ -75,6 +75,8 @@ export interface QuestionPipelineResult {
     llmBatches: number;
     tokenUsage: { inputTokens: number; outputTokens: number };
   };
+  /** Errors from failed LLM batches (pipeline continues on failure) */
+  errors?: Array<{ batchIndex: number; noteIds: string[]; error: string }>;
 }
 
 // ============ Main Pipeline ============
@@ -168,48 +170,64 @@ export async function runQuestionPipeline(
 
   // 6. Generate questions in batches with history context
   const generatedQuestions: Question[] = [];
+  const batchErrors: Array<{ batchIndex: number; noteIds: string[]; error: string }> = [];
 
   for (let i = 0; i < needsGeneration.length; i += config.notesPerBatch) {
     const batch = needsGeneration.slice(i, i + config.notesPerBatch);
+    const batchIndex = Math.floor(i / config.notesPerBatch);
     stats.llmBatches++;
 
-    const response = await input.llmProvider.generateQuestionsBatch({
-      notes: batch.map((n) => ({
-        noteId: n.noteId,
-        title: n.title,
-        content: n.content,
-      })),
-    });
+    try {
+      const response = await input.llmProvider.generateQuestionsBatch({
+        notes: batch.map((n) => ({
+          noteId: n.noteId,
+          title: n.title,
+          content: n.content,
+        })),
+      });
 
-    if (response.usage) {
-      stats.tokenUsage.inputTokens += response.usage.inputTokens;
-      stats.tokenUsage.outputTokens += response.usage.outputTokens;
-    }
-
-    // Cache questions by source note
-    const questionsByNote = new Map<string, Question[]>();
-    for (const q of response.questions) {
-      const existing = questionsByNote.get(q.sourceNoteId) ?? [];
-      existing.push(q);
-      questionsByNote.set(q.sourceNoteId, existing);
-    }
-
-    for (const note of batch) {
-      const questions = questionsByNote.get(note.noteId) ?? [];
-      if (questions.length > 0) {
-        await cache.set(note.noteId, note.contentHash, historyFingerprint, questions);
+      if (response.usage) {
+        stats.tokenUsage.inputTokens += response.usage.inputTokens;
+        stats.tokenUsage.outputTokens += response.usage.outputTokens;
       }
-    }
 
-    generatedQuestions.push(...response.questions);
-    stats.questionsGenerated += response.questions.length;
+      // Cache questions by source note
+      const questionsByNote = new Map<string, Question[]>();
+      for (const q of response.questions) {
+        const existing = questionsByNote.get(q.sourceNoteId) ?? [];
+        existing.push(q);
+        questionsByNote.set(q.sourceNoteId, existing);
+      }
+
+      for (const note of batch) {
+        const questions = questionsByNote.get(note.noteId) ?? [];
+        if (questions.length > 0) {
+          await cache.set(note.noteId, note.contentHash, historyFingerprint, questions);
+        }
+      }
+
+      generatedQuestions.push(...response.questions);
+      stats.questionsGenerated += response.questions.length;
+    } catch (error) {
+      // Record the error but continue processing other batches
+      batchErrors.push({
+        batchIndex,
+        noteIds: batch.map((n) => n.noteId),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Continue to next batch - we'll return partial results
+    }
   }
 
   // 7. Combine and select final questions
   const allCandidates = [...cachedQuestions, ...generatedQuestions];
   const finalQuestions = selectFinalQuestions(allCandidates, config);
 
-  return { questions: finalQuestions, stats };
+  return {
+    questions: finalQuestions,
+    stats,
+    errors: batchErrors.length > 0 ? batchErrors : undefined,
+  };
 }
 
 // ============ Question Selection ============

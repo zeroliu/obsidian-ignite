@@ -175,18 +175,35 @@ describe('QuestionCacheManager', () => {
     });
   });
 
-  describe('getAllCachedPaths', () => {
+  describe('getAllCacheKeys', () => {
     it('returns empty array when no cache exists', async () => {
-      const paths = await cache.getAllCachedPaths();
-      expect(paths).toEqual([]);
+      const keys = await cache.getAllCacheKeys();
+      expect(keys).toEqual([]);
     });
 
-    it('returns cached paths', async () => {
+    it('returns hashed cache keys (not original paths)', async () => {
       await cache.set('a.md', 'hash1', 'fp1', [mockQuestion]);
       await cache.set('b.md', 'hash2', 'fp2', [mockQuestion]);
 
-      const paths = await cache.getAllCachedPaths();
-      expect(paths.length).toBe(2);
+      const keys = await cache.getAllCacheKeys();
+      expect(keys.length).toBe(2);
+      // Keys are hashes, not original paths
+      expect(keys.every((k) => !k.includes('.md'))).toBe(true);
+    });
+  });
+
+  describe('getCacheCount', () => {
+    it('returns 0 when no cache exists', async () => {
+      const count = await cache.getCacheCount();
+      expect(count).toBe(0);
+    });
+
+    it('returns count of cached entries', async () => {
+      await cache.set('a.md', 'hash1', 'fp1', [mockQuestion]);
+      await cache.set('b.md', 'hash2', 'fp2', [mockQuestion]);
+
+      const count = await cache.getCacheCount();
+      expect(count).toBe(2);
     });
   });
 });

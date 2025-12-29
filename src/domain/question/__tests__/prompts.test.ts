@@ -138,11 +138,12 @@ describe('parseQuestionResponse', () => {
       },
     ]);
 
-    const questions = parseQuestionResponse(response);
-    expect(questions).toHaveLength(1);
-    expect(questions[0].question).toBe('What is X?');
-    expect(questions[0].format).toBe('multiple_choice');
-    expect(questions[0].options).toEqual(['A', 'B', 'C', 'D']);
+    const result = parseQuestionResponse(response);
+    expect(result.questions).toHaveLength(1);
+    expect(result.questions[0].question).toBe('What is X?');
+    expect(result.questions[0].format).toBe('multiple_choice');
+    expect(result.questions[0].options).toEqual(['A', 'B', 'C', 'D']);
+    expect(result.skipped).toHaveLength(0);
   });
 
   it('extracts JSON from markdown code blocks', () => {
@@ -160,9 +161,9 @@ describe('parseQuestionResponse', () => {
 ]
 \`\`\``;
 
-    const questions = parseQuestionResponse(response);
-    expect(questions).toHaveLength(1);
-    expect(questions[0].format).toBe('true_false');
+    const result = parseQuestionResponse(response);
+    expect(result.questions).toHaveLength(1);
+    expect(result.questions[0].format).toBe('true_false');
   });
 
   it('handles questions with missing optional fields', () => {
@@ -176,10 +177,10 @@ describe('parseQuestionResponse', () => {
       },
     ]);
 
-    const questions = parseQuestionResponse(response);
-    expect(questions).toHaveLength(1);
-    expect(questions[0].qualityScore).toBe(0.5); // Default
-    expect(questions[0].explanation).toBeUndefined();
+    const result = parseQuestionResponse(response);
+    expect(result.questions).toHaveLength(1);
+    expect(result.questions[0].qualityScore).toBe(0.5); // Default
+    expect(result.questions[0].explanation).toBeUndefined();
   });
 
   it('clamps quality score to 0-1 range', () => {
@@ -202,12 +203,12 @@ describe('parseQuestionResponse', () => {
       },
     ]);
 
-    const questions = parseQuestionResponse(response);
-    expect(questions[0].qualityScore).toBe(1);
-    expect(questions[1].qualityScore).toBe(0);
+    const result = parseQuestionResponse(response);
+    expect(result.questions[0].qualityScore).toBe(1);
+    expect(result.questions[1].qualityScore).toBe(0);
   });
 
-  it('skips invalid questions', () => {
+  it('skips invalid questions and reports them', () => {
     const response = JSON.stringify([
       {
         // Missing sourceNoteId
@@ -227,9 +228,11 @@ describe('parseQuestionResponse', () => {
       },
     ]);
 
-    const questions = parseQuestionResponse(response);
-    expect(questions).toHaveLength(1);
-    expect(questions[0].question).toBe('Valid');
+    const result = parseQuestionResponse(response);
+    expect(result.questions).toHaveLength(1);
+    expect(result.questions[0].question).toBe('Valid');
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0].reason).toContain('sourceNoteId');
   });
 
   it('validates multiple choice has 4 options', () => {
@@ -244,8 +247,44 @@ describe('parseQuestionResponse', () => {
       },
     ]);
 
-    const questions = parseQuestionResponse(response);
-    expect(questions).toHaveLength(0);
+    const result = parseQuestionResponse(response);
+    expect(result.questions).toHaveLength(0);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0].reason).toContain('4 options');
+  });
+
+  it('validates format is valid', () => {
+    const response = JSON.stringify([
+      {
+        sourceNoteId: 'test.md',
+        format: 'invalid_format',
+        difficulty: 'medium',
+        question: 'Bad format',
+        correctAnswer: 'A',
+      },
+    ]);
+
+    const result = parseQuestionResponse(response);
+    expect(result.questions).toHaveLength(0);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0].reason).toContain('invalid format');
+  });
+
+  it('validates difficulty is valid', () => {
+    const response = JSON.stringify([
+      {
+        sourceNoteId: 'test.md',
+        format: 'free_form',
+        difficulty: 'super_hard',
+        question: 'Bad difficulty',
+        correctAnswer: 'A',
+      },
+    ]);
+
+    const result = parseQuestionResponse(response);
+    expect(result.questions).toHaveLength(0);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0].reason).toContain('invalid difficulty');
   });
 
   it('generates unique IDs for each question', () => {
@@ -266,8 +305,8 @@ describe('parseQuestionResponse', () => {
       },
     ]);
 
-    const questions = parseQuestionResponse(response);
-    expect(questions[0].id).not.toBe(questions[1].id);
+    const result = parseQuestionResponse(response);
+    expect(result.questions[0].id).not.toBe(result.questions[1].id);
   });
 
   it('throws for response without JSON array', () => {

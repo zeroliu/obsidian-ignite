@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   calculateColdStartScore,
   calculateRecencyScore,
@@ -179,35 +179,27 @@ describe('calculateStruggleScore', () => {
 });
 
 describe('calculateColdStartScore', () => {
-  let mockMathRandom: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    // Mock Math.random for deterministic tests
-    mockMathRandom = vi.spyOn(Math, 'random').mockReturnValue(0.5);
-  });
-
-  afterEach(() => {
-    mockMathRandom.mockRestore();
-  });
+  const now = Date.now();
 
   it('returns higher score for notes with more headings', () => {
     const lowHeading: NoteSelectionInput = {
       noteId: 'a.md',
       wordCount: 500,
       headingCount: 1,
-      modifiedAt: Date.now(),
+      modifiedAt: now,
       incomingLinkCount: 0,
     };
     const highHeading: NoteSelectionInput = {
       noteId: 'b.md',
       wordCount: 500,
       headingCount: 5,
-      modifiedAt: Date.now(),
+      modifiedAt: now,
       incomingLinkCount: 0,
     };
 
-    expect(calculateColdStartScore(highHeading)).toBeGreaterThan(
-      calculateColdStartScore(lowHeading),
+    // Use explicit jitter for deterministic comparison
+    expect(calculateColdStartScore(highHeading, { now, jitter: 0.5 })).toBeGreaterThan(
+      calculateColdStartScore(lowHeading, { now, jitter: 0.5 }),
     );
   });
 
@@ -216,18 +208,48 @@ describe('calculateColdStartScore', () => {
       noteId: 'a.md',
       wordCount: 500,
       headingCount: 2,
-      modifiedAt: Date.now(),
+      modifiedAt: now,
       incomingLinkCount: 1,
     };
     const highLinks: NoteSelectionInput = {
       noteId: 'b.md',
       wordCount: 500,
       headingCount: 2,
-      modifiedAt: Date.now(),
+      modifiedAt: now,
       incomingLinkCount: 10,
     };
 
-    expect(calculateColdStartScore(highLinks)).toBeGreaterThan(calculateColdStartScore(lowLinks));
+    expect(calculateColdStartScore(highLinks, { now, jitter: 0.5 })).toBeGreaterThan(
+      calculateColdStartScore(lowLinks, { now, jitter: 0.5 }),
+    );
+  });
+
+  it('is deterministic when jitter is explicitly provided', () => {
+    const note: NoteSelectionInput = {
+      noteId: 'test.md',
+      wordCount: 500,
+      headingCount: 3,
+      modifiedAt: now,
+      incomingLinkCount: 5,
+    };
+
+    const score1 = calculateColdStartScore(note, { now, jitter: 0.5 });
+    const score2 = calculateColdStartScore(note, { now, jitter: 0.5 });
+    expect(score1).toBe(score2);
+  });
+
+  it('varies with different jitter values', () => {
+    const note: NoteSelectionInput = {
+      noteId: 'test.md',
+      wordCount: 500,
+      headingCount: 3,
+      modifiedAt: now,
+      incomingLinkCount: 5,
+    };
+
+    const scoreNoJitter = calculateColdStartScore(note, { now, jitter: 0 });
+    const scoreMaxJitter = calculateColdStartScore(note, { now, jitter: 1 });
+    expect(scoreMaxJitter).toBeGreaterThan(scoreNoJitter);
   });
 });
 

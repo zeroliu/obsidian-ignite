@@ -109,13 +109,26 @@ export class QuestionCacheManager {
   }
 
   /**
-   * Get all cached note paths
+   * Get all cache keys (note: these are hashed keys, not original paths)
+   *
+   * The cache uses hashed keys for storage efficiency and to avoid path length issues.
+   * To check if a specific note is cached, use `isValid()` with the note path.
+   *
+   * @returns Array of hashed cache key suffixes
    */
-  async getAllCachedPaths(): Promise<string[]> {
+  async getAllCacheKeys(): Promise<string[]> {
     const keys = await this.storage.keys();
     return keys
       .filter((key) => key.startsWith(CACHE_KEY_PREFIX))
       .map((key) => key.replace(`${CACHE_KEY_PREFIX}/`, ''));
+  }
+
+  /**
+   * Get count of cached entries
+   */
+  async getCacheCount(): Promise<number> {
+    const keys = await this.getAllCacheKeys();
+    return keys.length;
   }
 
   /**
