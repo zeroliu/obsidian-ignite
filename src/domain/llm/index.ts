@@ -55,3 +55,7 @@ export {
   buildConceptNamingPrompt,
   parseNamingResponse,
 } from './prompts';
+
+// Helpers
+export { getEffectiveNoteIds } from './getEffectiveNoteIds';
+export type { ManualOverrides } from './getEffectiveNoteIds';

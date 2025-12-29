@@ -3,6 +3,7 @@ import { toLegacyCluster } from '@/domain/clustering/types';
 import { EmbeddingCacheManager } from '@/domain/embedding/cache';
 import { EmbeddingOrchestrator } from '@/domain/embedding/embedBatch';
 import { runLLMPipeline } from '@/domain/llm/pipeline';
+import type { TrackedConcept } from '@/domain/llm/types';
 import type { IEmbeddingProvider } from '@/ports/IEmbeddingProvider';
 import type { ILLMProvider } from '@/ports/ILLMProvider';
 import type { IMetadataProvider, ResolvedLinks } from '@/ports/IMetadataProvider';
@@ -178,14 +179,15 @@ export class PipelineOrchestrator {
     // Build concept lookup map for merging LLM results
     const conceptMap = new Map(llmResult.concepts.map((c) => [c.clusterId, c]));
 
-    const serializedClusters = clusteringResult.result.clusters.map((cluster) => {
-      const base = serializeCluster(cluster);
-      const concept = conceptMap.get(cluster.id);
-      if (!concept) {
-        throw new Error(`No concept found for cluster ${cluster.id}`);
-      }
-      return applyLLMResultsToCluster(base, concept, llmResult.misfitNotes);
-    });
+    // Only serialize clusters that have concepts (some may be merged)
+    const serializedClusters = clusteringResult.result.clusters
+      .filter((cluster) => conceptMap.has(cluster.id))
+      .map((cluster) => {
+        const base = serializeCluster(cluster);
+        const concept = conceptMap.get(cluster.id);
+        // Concept is guaranteed to exist due to filter above
+        return applyLLMResultsToCluster(base, concept as TrackedConcept, llmResult.misfitNotes);
+      });
 
     const persistedResult: PersistedClusteringResult = {
       version: CLUSTERING_RESULT_VERSION,

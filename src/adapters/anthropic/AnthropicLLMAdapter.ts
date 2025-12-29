@@ -5,6 +5,15 @@ import {
 } from '@/domain/llm/prompts';
 import type { ConceptNamingRequest, ConceptNamingResponse, LLMConfig } from '@/domain/llm/types';
 import { DEFAULT_LLM_CONFIG } from '@/domain/llm/types';
+import {
+  QUESTION_GENERATION_SYSTEM_PROMPT,
+  buildQuestionGenerationPrompt,
+  parseQuestionResponse,
+} from '@/domain/question/prompts';
+import type {
+  QuestionGenerationRequest,
+  QuestionGenerationResponse,
+} from '@/domain/question/types';
 import type { ILLMProvider } from '@/ports/ILLMProvider';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -46,6 +55,22 @@ export class AnthropicLLMAdapter implements ILLMProvider {
 
     return {
       results,
+      usage: response.usage,
+    };
+  }
+
+  async generateQuestionsBatch(
+    request: QuestionGenerationRequest,
+  ): Promise<QuestionGenerationResponse> {
+    const userPrompt = buildQuestionGenerationPrompt(request);
+
+    const response = await this.callWithRetry(QUESTION_GENERATION_SYSTEM_PROMPT, userPrompt);
+
+    const { questions, skipped } = parseQuestionResponse(response.content);
+
+    return {
+      questions,
+      skipped,
       usage: response.usage,
     };
   }

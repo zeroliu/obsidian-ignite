@@ -1,4 +1,8 @@
 import type { ConceptNamingRequest, ConceptNamingResponse, LLMConfig } from '@/domain/llm/types';
+import type {
+  QuestionGenerationRequest,
+  QuestionGenerationResponse,
+} from '@/domain/question/types';
 
 /**
  * Port interface for LLM operations
@@ -21,6 +25,14 @@ export interface ILLMProvider {
    * @returns Promise resolving to naming results with misfits
    */
   nameConceptsBatch(request: ConceptNamingRequest): Promise<ConceptNamingResponse>;
+
+  /**
+   * Generate quiz questions from notes
+   *
+   * @param request - Notes to generate questions for
+   * @returns Promise resolving to generated questions with usage stats
+   */
+  generateQuestionsBatch(request: QuestionGenerationRequest): Promise<QuestionGenerationResponse>;
 
   /**
    * Get current LLM configuration
