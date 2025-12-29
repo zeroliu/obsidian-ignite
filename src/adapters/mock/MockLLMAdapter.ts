@@ -7,6 +7,12 @@ import type {
   MisfitNote,
 } from '@/domain/llm/types';
 import { DEFAULT_LLM_CONFIG } from '@/domain/llm/types';
+import type {
+  Question,
+  QuestionGenerationRequest,
+  QuestionGenerationResponse,
+} from '@/domain/question/types';
+import { generateQuestionId } from '@/domain/question/types';
 import type { ILLMProvider } from '@/ports/ILLMProvider';
 
 /**
@@ -44,11 +50,17 @@ export interface MockLLMFixture {
 /**
  * Record of an LLM call for testing
  */
-export interface LLMCallRecord {
-  type: 'nameConceptsBatch';
-  request: ConceptNamingRequest;
-  timestamp: number;
-}
+export type LLMCallRecord =
+  | {
+      type: 'nameConceptsBatch';
+      request: ConceptNamingRequest;
+      timestamp: number;
+    }
+  | {
+      type: 'generateQuestionsBatch';
+      request: QuestionGenerationRequest;
+      timestamp: number;
+    };
 
 /**
  * Default naming rules for common patterns
@@ -158,6 +170,63 @@ export class MockLLMAdapter implements ILLMProvider {
       usage: {
         inputTokens: this.estimateInputTokens(request),
         outputTokens: this.estimateOutputTokens(results),
+      },
+    };
+  }
+
+  async generateQuestionsBatch(
+    request: QuestionGenerationRequest,
+  ): Promise<QuestionGenerationResponse> {
+    this.callHistory.push({
+      type: 'generateQuestionsBatch',
+      request,
+      timestamp: Date.now(),
+    });
+
+    const questions: Question[] = [];
+
+    for (const note of request.notes) {
+      // Generate deterministic mock questions
+      questions.push(
+        {
+          id: generateQuestionId(),
+          format: 'multiple_choice',
+          difficulty: 'medium',
+          question: `What is the main concept in "${note.title}"?`,
+          options: ['Concept A', 'Concept B', 'Concept C', 'Concept D'],
+          correctAnswer: 0,
+          qualityScore: 0.8,
+          sourceNoteId: note.noteId,
+          generatedAt: Date.now(),
+        },
+        {
+          id: generateQuestionId(),
+          format: 'true_false',
+          difficulty: 'easy',
+          question: `The note "${note.title}" covers important concepts.`,
+          correctAnswer: 'true',
+          qualityScore: 0.7,
+          sourceNoteId: note.noteId,
+          generatedAt: Date.now(),
+        },
+        {
+          id: generateQuestionId(),
+          format: 'free_form',
+          difficulty: 'hard',
+          question: `Explain the key takeaways from "${note.title}".`,
+          correctAnswer: 'The key takeaways include...',
+          qualityScore: 0.85,
+          sourceNoteId: note.noteId,
+          generatedAt: Date.now(),
+        },
+      );
+    }
+
+    return {
+      questions,
+      usage: {
+        inputTokens: request.notes.length * 500,
+        outputTokens: questions.length * 100,
       },
     };
   }
