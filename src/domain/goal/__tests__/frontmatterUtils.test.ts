@@ -27,9 +27,7 @@ negative: -10
 
 Body`;
 
-      const result = parseFrontmatter<{ count: number; rating: number; negative: number }>(
-        content,
-      );
+      const result = parseFrontmatter<{ count: number; rating: number; negative: number }>(content);
 
       expect(result.frontmatter.count).toBe(42);
       expect(result.frontmatter.rating).toBe(4.5);

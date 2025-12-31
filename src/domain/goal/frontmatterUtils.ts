@@ -62,20 +62,27 @@ function parseYaml<T>(yaml: string): T {
       const [, spaces, key, value] = keyMatch;
       const lineIndent = spaces.length;
 
-      // If we were building an array or object, save it
-      if (currentArray && currentKey) {
-        result[currentKey] = currentArray;
-        currentArray = null;
-        currentKey = null;
-      }
-      if (currentObject && currentKey) {
-        result[currentKey] = currentObject;
-        currentObject = null;
-        currentKey = null;
-      }
-
       if (lineIndent === 0) {
-        // Top-level key
+        // Top-level key - save any previous array/object first
+        if (currentArray && currentKey) {
+          // Push any remaining object to the array
+          if (currentObject) {
+            currentArray.push(currentObject);
+            currentObject = null;
+          }
+          result[currentKey] = currentArray;
+          currentArray = null;
+          currentKey = null;
+        } else if (currentObject && currentKey) {
+          result[currentKey] = currentObject;
+          currentObject = null;
+          currentKey = null;
+        } else if (currentKey) {
+          // Previous key had no array/object, set it to null
+          result[currentKey] = null;
+          currentKey = null;
+        }
+
         if (value === '') {
           // Empty value means array or object follows
           currentKey = key;
@@ -101,6 +108,10 @@ function parseYaml<T>(yaml: string): T {
         // Check if this is an object array item
         const objectKeyMatch = value.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/);
         if (objectKeyMatch) {
+          // Push previous object before starting a new one
+          if (currentObject) {
+            currentArray.push(currentObject);
+          }
           const [, key, val] = objectKeyMatch;
           currentObject = { [key]: parseValue(val) };
         } else {
@@ -123,11 +134,20 @@ function parseYaml<T>(yaml: string): T {
   }
 
   // Save any remaining array or object
-  if (currentArray && currentKey) {
-    result[currentKey] = currentArray;
-  }
-  if (currentObject && currentKey) {
-    result[currentKey] = currentObject;
+  if (currentKey) {
+    if (currentArray) {
+      // Push any remaining object to the array
+      if (currentObject) {
+        currentArray.push(currentObject);
+        currentObject = null;
+      }
+      result[currentKey] = currentArray;
+    } else if (currentObject) {
+      result[currentKey] = currentObject;
+    } else {
+      // Empty key with no array/object means null
+      result[currentKey] = null;
+    }
   }
 
   return result as T;
@@ -151,12 +171,17 @@ function parseValue(value: string): unknown {
     return Number.parseFloat(trimmed);
   }
 
-  // String (remove quotes if present)
+  // String (remove quotes if present and unescape)
   if (
     (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
     (trimmed.startsWith("'") && trimmed.endsWith("'"))
   ) {
-    return trimmed.slice(1, -1);
+    const unquoted = trimmed.slice(1, -1);
+    // Unescape special characters
+    return unquoted
+      .replace(/\\n/g, '\n') // Unescape newlines
+      .replace(/\\"/g, '"') // Unescape quotes
+      .replace(/\\\\/g, '\\'); // Unescape backslashes (must be last)
   }
 
   return trimmed;
@@ -234,7 +259,12 @@ function serializeYamlValue(value: unknown): string {
   if (typeof value === 'string') {
     // Quote strings that contain special characters
     if (/[:#\[\]{}|>]/.test(value) || value.includes('\n')) {
-      return `"${value.replace(/"/g, '\\"')}"`;
+      // Escape special characters and newlines
+      const escaped = value
+        .replace(/\\/g, '\\\\') // Escape backslashes first
+        .replace(/"/g, '\\"') // Escape quotes
+        .replace(/\n/g, '\\n'); // Escape newlines
+      return `"${escaped}"`;
     }
     return value;
   }

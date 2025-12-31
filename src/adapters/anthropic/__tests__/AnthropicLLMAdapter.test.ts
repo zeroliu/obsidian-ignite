@@ -62,13 +62,12 @@ describe('AnthropicLLMAdapter', () => {
         json: async () => mockResponse,
       });
 
-      const result = await adapter.chat([
-        { role: 'user', content: 'Hello' },
-      ]);
+      const result = await adapter.chat([{ role: 'user', content: 'Hello' }]);
 
       expect(result.content).toBe('Hello! How can I help?');
-      expect(result.usage.inputTokens).toBe(10);
-      expect(result.usage.outputTokens).toBe(20);
+      expect(result.usage).toBeDefined();
+      expect(result.usage?.inputTokens).toBe(10);
+      expect(result.usage?.outputTokens).toBe(20);
 
       expect(global.fetch).toHaveBeenCalledWith(
         'https://api.anthropic.com/v1/messages',
@@ -146,9 +145,9 @@ describe('AnthropicLLMAdapter', () => {
         text: async () => 'Invalid API key',
       });
 
-      await expect(
-        adapter.chat([{ role: 'user', content: 'Hello' }]),
-      ).rejects.toThrow('Anthropic API error (401): Invalid API key');
+      await expect(adapter.chat([{ role: 'user', content: 'Hello' }])).rejects.toThrow(
+        'Anthropic API error (401): Invalid API key',
+      );
     });
 
     it('should pass options to API', async () => {
@@ -167,14 +166,11 @@ describe('AnthropicLLMAdapter', () => {
         json: async () => mockResponse,
       });
 
-      await adapter.chat(
-        [{ role: 'user', content: 'Hello' }],
-        {
-          temperature: 0.7,
-          maxTokens: 2048,
-          stopSequences: ['STOP'],
-        },
-      );
+      await adapter.chat([{ role: 'user', content: 'Hello' }], {
+        temperature: 0.7,
+        maxTokens: 2048,
+        stopSequences: ['STOP'],
+      });
 
       const callArgs = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
       const requestBody = JSON.parse(callArgs[1].body);
@@ -274,9 +270,7 @@ describe('AnthropicLLMAdapter', () => {
     });
 
     it('should call onError on fetch failure', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new Error('Network error'),
-      );
+      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Network error'));
 
       const callbacks: LLMStreamCallbacks = {
         onToken: vi.fn(),

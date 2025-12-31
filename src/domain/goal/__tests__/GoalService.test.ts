@@ -1,7 +1,7 @@
 import type { IVaultProvider } from '@/ports';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoalService } from '../GoalService';
-import type { Goal, Milestone } from '../types';
+import type { Milestone } from '../types';
 
 describe('GoalService', () => {
   let service: GoalService;
@@ -72,7 +72,7 @@ describe('GoalService', () => {
       description: 'Master TypeScript fundamentals',
       deadline: '2025-12-31',
       milestones: [
-        { id: 'm1', title: 'Learn basics', completed: false },
+        { id: 'm1', content: 'Learn basics', completed: false, order: 0 },
       ] as Milestone[],
     };
 
@@ -84,33 +84,36 @@ describe('GoalService', () => {
       expect(goal.deadline).toBe(validParams.deadline);
       expect(goal.milestones).toEqual(validParams.milestones);
       expect(goal.status).toBe('active');
-      expect(goal.id).toMatch(/^goal-\d+-[a-z0-9]+$/);
+      // ID should start with 'goal-' and contain either UUID or timestamp-random format
+      expect(goal.id).toMatch(
+        /^goal-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d+-[a-z0-9]+)$/,
+      );
       expect(mockVaultProvider.createFolder).toHaveBeenCalled();
       expect(mockVaultProvider.createFile).toHaveBeenCalled();
     });
 
     it('should throw error if name is empty', async () => {
-      await expect(
-        service.createGoal({ ...validParams, name: '' }),
-      ).rejects.toThrow('Goal name cannot be empty');
+      await expect(service.createGoal({ ...validParams, name: '' })).rejects.toThrow(
+        'Goal name cannot be empty',
+      );
     });
 
     it('should throw error if description is empty', async () => {
-      await expect(
-        service.createGoal({ ...validParams, description: '' }),
-      ).rejects.toThrow('Goal description cannot be empty');
+      await expect(service.createGoal({ ...validParams, description: '' })).rejects.toThrow(
+        'Goal description cannot be empty',
+      );
     });
 
     it('should throw error if deadline is empty', async () => {
-      await expect(
-        service.createGoal({ ...validParams, deadline: '' }),
-      ).rejects.toThrow('Goal deadline cannot be empty');
+      await expect(service.createGoal({ ...validParams, deadline: '' })).rejects.toThrow(
+        'Goal deadline cannot be empty',
+      );
     });
 
     it('should throw error if milestones array is empty', async () => {
-      await expect(
-        service.createGoal({ ...validParams, milestones: [] }),
-      ).rejects.toThrow('Goal must have at least one milestone');
+      await expect(service.createGoal({ ...validParams, milestones: [] })).rejects.toThrow(
+        'Goal must have at least one milestone',
+      );
     });
 
     it('should create folder structure for goal', async () => {
@@ -120,9 +123,7 @@ describe('GoalService', () => {
       expect(mockVaultProvider.createFolder).toHaveBeenCalledWith(
         `ignite/${goal.id}/conversations`,
       );
-      expect(mockVaultProvider.createFolder).toHaveBeenCalledWith(
-        `ignite/${goal.id}/qa-sessions`,
-      );
+      expect(mockVaultProvider.createFolder).toHaveBeenCalledWith(`ignite/${goal.id}/qa-sessions`);
     });
   });
 
@@ -132,7 +133,7 @@ describe('GoalService', () => {
         name: 'Test Goal',
         description: 'Test Description',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm1', title: 'Milestone 1', completed: false }],
+        milestones: [{ id: 'm1', content: 'Milestone 1', completed: false, order: 0 }],
       });
 
       const retrieved = await service.getGoalById(created.id);
@@ -159,13 +160,13 @@ describe('GoalService', () => {
         name: 'Goal 1',
         description: 'Description 1',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm1', title: 'M1', completed: false }],
+        milestones: [{ id: 'm1', content: 'M1', completed: false, order: 0 }],
       });
       await service.createGoal({
         name: 'Goal 2',
         description: 'Description 2',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm2', title: 'M2', completed: false }],
+        milestones: [{ id: 'm2', content: 'M2', completed: false, order: 0 }],
       });
 
       const goals = await service.getAllGoals();
@@ -179,7 +180,7 @@ describe('GoalService', () => {
         name: 'Valid Goal',
         description: 'Description',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm1', title: 'M1', completed: false }],
+        milestones: [{ id: 'm1', content: 'M1', completed: false, order: 0 }],
       });
 
       // Add corrupted file
@@ -193,12 +194,16 @@ describe('GoalService', () => {
 
   describe('updateGoal', () => {
     it('should update goal fields', async () => {
+      vi.useFakeTimers();
       const created = await service.createGoal({
         name: 'Original Name',
         description: 'Original Description',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm1', title: 'M1', completed: false }],
+        milestones: [{ id: 'm1', content: 'M1', completed: false, order: 0 }],
       });
+
+      // Advance time to ensure updatedAt is different
+      vi.advanceTimersByTime(1000);
 
       const updated = await service.updateGoal(created.id, {
         name: 'Updated Name',
@@ -210,12 +215,14 @@ describe('GoalService', () => {
       expect(updated.id).toBe(created.id);
       expect(updated.createdAt).toBe(created.createdAt);
       expect(updated.updatedAt).not.toBe(created.updatedAt);
+
+      vi.useRealTimers();
     });
 
     it('should throw error if goal does not exist', async () => {
-      await expect(
-        service.updateGoal('nonexistent-id', { name: 'New Name' }),
-      ).rejects.toThrow('Goal not found: nonexistent-id');
+      await expect(service.updateGoal('nonexistent-id', { name: 'New Name' })).rejects.toThrow(
+        'Goal not found: nonexistent-id',
+      );
     });
   });
 
@@ -225,7 +232,7 @@ describe('GoalService', () => {
         name: 'To Delete',
         description: 'Will be deleted',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm1', title: 'M1', completed: false }],
+        milestones: [{ id: 'm1', content: 'M1', completed: false, order: 0 }],
       });
 
       await service.deleteGoal(created.id);
@@ -266,7 +273,7 @@ describe('GoalService', () => {
         name: 'To Complete',
         description: 'Will be completed',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm1', title: 'M1', completed: false }],
+        milestones: [{ id: 'm1', content: 'M1', completed: false, order: 0 }],
       });
 
       const completed = await service.completeGoal(created.id);
@@ -281,7 +288,7 @@ describe('GoalService', () => {
         name: 'Test Goal',
         description: 'Test',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm1', title: 'M1', completed: false }],
+        milestones: [{ id: 'm1', content: 'M1', completed: false, order: 0 }],
       });
 
       const updated = await service.addNotesToGoal(created.id, ['note1.md', 'note2.md']);
@@ -294,7 +301,7 @@ describe('GoalService', () => {
         name: 'Test Goal',
         description: 'Test',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm1', title: 'M1', completed: false }],
+        milestones: [{ id: 'm1', content: 'M1', completed: false, order: 0 }],
         notesPaths: ['note1.md'],
       });
 
@@ -312,7 +319,7 @@ describe('GoalService', () => {
         name: 'Test Goal',
         description: 'Test',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm1', title: 'M1', completed: false }],
+        milestones: [{ id: 'm1', content: 'M1', completed: false, order: 0 }],
         notesPaths: ['note1.md', 'note2.md', 'note3.md'],
       });
 
@@ -328,12 +335,12 @@ describe('GoalService', () => {
         name: 'Test Goal',
         description: 'Test',
         deadline: '2025-12-31',
-        milestones: [{ id: 'm1', title: 'Original', completed: false }],
+        milestones: [{ id: 'm1', content: 'Original', completed: false, order: 0 }],
       });
 
       const newMilestones: Milestone[] = [
-        { id: 'm1', title: 'Updated', completed: true },
-        { id: 'm2', title: 'New', completed: false },
+        { id: 'm1', content: 'Updated', completed: true, order: 0 },
+        { id: 'm2', content: 'New', completed: false, order: 1 },
       ];
 
       const updated = await service.updateMilestones(created.id, newMilestones);

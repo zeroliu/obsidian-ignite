@@ -54,7 +54,7 @@ type AnthropicStreamEvent =
   | { type: 'content_block_start'; index: number; content_block: { type: 'text'; text: string } }
   | { type: 'content_block_delta'; index: number; delta: { type: 'text_delta'; text: string } }
   | { type: 'content_block_stop'; index: number }
-  | { type: 'message_delta'; delta: { stop_reason: string }; usage: { output_tokens: number } }
+  | { type: 'message_delta'; delta?: { stop_reason: string }; usage: { output_tokens: number } }
   | { type: 'message_stop' }
   | { type: 'ping' };
 
@@ -289,6 +289,33 @@ export class AnthropicLLMAdapter implements ILLMProvider {
               callbacks.onError(error);
               throw error;
             }
+          }
+        }
+      }
+
+      // Process any remaining data in the buffer
+      if (buffer.trim() && buffer.startsWith('data: ')) {
+        const data = buffer.slice(6); // Remove 'data: ' prefix
+        if (data !== '[DONE]') {
+          try {
+            const event = JSON.parse(data) as AnthropicStreamEvent;
+
+            switch (event.type) {
+              case 'message_start':
+                inputTokens = event.message.usage.input_tokens;
+                break;
+              case 'content_block_delta':
+                if (event.delta.type === 'text_delta') {
+                  callbacks.onToken(event.delta.text);
+                  fullContent += event.delta.text;
+                }
+                break;
+              case 'message_delta':
+                outputTokens = event.usage.output_tokens;
+                break;
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse final streaming event:', parseError);
           }
         }
       }

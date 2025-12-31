@@ -149,7 +149,8 @@ export class GoalService {
       throw new Error(`Goal not found: ${goalId}`);
     }
 
-    const uniquePaths = new Set([...goal.notesPaths, ...notesPaths]);
+    const existingPaths = goal.notesPaths ?? [];
+    const uniquePaths = new Set([...existingPaths, ...notesPaths]);
     return this.updateGoal(goalId, {
       notesPaths: Array.from(uniquePaths),
     });
@@ -164,8 +165,9 @@ export class GoalService {
       throw new Error(`Goal not found: ${goalId}`);
     }
 
+    const existingPaths = goal.notesPaths ?? [];
     const pathsToRemove = new Set(notesPaths);
-    const updatedPaths = goal.notesPaths.filter((path) => !pathsToRemove.has(path));
+    const updatedPaths = existingPaths.filter((path) => !pathsToRemove.has(path));
 
     return this.updateGoal(goalId, { notesPaths: updatedPaths });
   }
@@ -212,11 +214,17 @@ export class GoalService {
   }
 
   /**
-   * Generate a unique goal ID.
+   * Generate a unique goal ID using UUID v4.
    */
   private generateGoalId(): string {
+    // Use crypto.randomUUID() which is available in Node.js 14.17+ and modern browsers
+    // Falls back to timestamp + random if not available (for compatibility)
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return `goal-${crypto.randomUUID()}`;
+    }
+    // Fallback for environments without crypto.randomUUID()
     const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 8);
+    const random = Math.random().toString(36).substring(2, 15);
     return `goal-${timestamp}-${random}`;
   }
 
@@ -242,7 +250,9 @@ export class GoalService {
       throw new Error('Goal ID cannot be empty');
     }
     if (goalId.includes('/') || goalId.includes('\\') || goalId.includes('..')) {
-      throw new Error('Invalid goal ID: cannot contain path separators or parent directory references');
+      throw new Error(
+        'Invalid goal ID: cannot contain path separators or parent directory references',
+      );
     }
   }
 }
