@@ -10,6 +10,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -133,5 +134,13 @@ export class FileSystemVaultAdapter implements IVaultProvider {
       throw new Error(`File not found: ${path}`);
     }
     unlinkSync(fullPath);
+  }
+
+  async deleteFolder(path: string): Promise<void> {
+    const fullPath = join(this.vaultPath, path);
+    if (!existsSync(fullPath)) {
+      throw new Error(`Folder not found: ${path}`);
+    }
+    rmSync(fullPath, { recursive: true, force: true });
   }
 }

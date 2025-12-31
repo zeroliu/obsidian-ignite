@@ -1,7 +1,7 @@
 import { GoalService } from '@/domain/goal/GoalService';
 import type { Goal, Milestone } from '@/domain/goal/types';
 import type React from 'react';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useApp } from './AppContext';
 
 /**
@@ -37,7 +37,7 @@ const GoalContext = createContext<GoalContextValue | undefined>(undefined);
  */
 export function GoalProvider({ children }: { children: React.ReactNode }) {
   const { vaultProvider } = useApp();
-  const [goalService] = useState(() => new GoalService(vaultProvider));
+  const goalService = useMemo(() => new GoalService(vaultProvider), [vaultProvider]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

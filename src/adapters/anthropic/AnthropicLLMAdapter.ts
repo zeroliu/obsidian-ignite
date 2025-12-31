@@ -80,6 +80,9 @@ export class AnthropicLLMAdapter implements ILLMProvider {
   private readonly baseUrl = 'https://api.anthropic.com/v1';
 
   constructor(config: AnthropicLLMConfig) {
+    if (!config.apiKey || config.apiKey.trim().length === 0) {
+      throw new Error('Anthropic API key is required');
+    }
     this.apiKey = config.apiKey;
     this.model = config.model ?? 'claude-3-5-sonnet-20241022';
     this.defaultMaxTokens = config.maxTokens ?? 4096;
@@ -158,8 +161,9 @@ export class AnthropicLLMAdapter implements ILLMProvider {
 
   estimateTokens(text: string): number {
     // Rough estimation: ~4 characters per token for English text
-    // This is a conservative estimate; actual tokenization may vary
-    return Math.ceil(text.length / 4);
+    // Add 20% safety margin to avoid underestimating
+    const baseEstimate = Math.ceil(text.length / 4);
+    return Math.ceil(baseEstimate * 1.2);
   }
 
   /**
@@ -240,6 +244,8 @@ export class AnthropicLLMAdapter implements ILLMProvider {
     let fullContent = '';
     let inputTokens = 0;
     let outputTokens = 0;
+    let parseErrors = 0;
+    const MAX_PARSE_ERRORS = 5;
 
     try {
       while (true) {
@@ -274,8 +280,15 @@ export class AnthropicLLMAdapter implements ILLMProvider {
                 break;
             }
           } catch (parseError) {
-            // Skip malformed JSON events
+            // Track parse errors and fail if too many occur
+            parseErrors++;
             console.warn('Failed to parse streaming event:', parseError);
+
+            if (parseErrors >= MAX_PARSE_ERRORS) {
+              const error = new Error(`Too many parse errors (${parseErrors}) during streaming`);
+              callbacks.onError(error);
+              throw error;
+            }
           }
         }
       }

@@ -19,17 +19,18 @@ export class GoalService {
     const files = await this.vaultProvider.listMarkdownFiles();
     const goalFiles = files.filter((file) => file.path.match(/^ignite\/[^/]+\/goal\.md$/));
 
-    const goals: Goal[] = [];
-    for (const file of goalFiles) {
+    // Load goals in parallel for better performance
+    const goalPromises = goalFiles.map(async (file) => {
       try {
-        const goal = await this.loadGoal(file.path);
-        goals.push(goal);
+        return await this.loadGoal(file.path);
       } catch (error) {
         console.warn(`Failed to load goal from ${file.path}:`, error);
+        return null;
       }
-    }
+    });
 
-    return goals;
+    const results = await Promise.all(goalPromises);
+    return results.filter((goal): goal is Goal => goal !== null);
   }
 
   /**
@@ -56,6 +57,20 @@ export class GoalService {
     milestones: Milestone[];
     notesPaths?: string[];
   }): Promise<Goal> {
+    // Validate inputs
+    if (!params.name || params.name.trim().length === 0) {
+      throw new Error('Goal name cannot be empty');
+    }
+    if (!params.description || params.description.trim().length === 0) {
+      throw new Error('Goal description cannot be empty');
+    }
+    if (!params.deadline || params.deadline.trim().length === 0) {
+      throw new Error('Goal deadline cannot be empty');
+    }
+    if (!params.milestones || params.milestones.length === 0) {
+      throw new Error('Goal must have at least one milestone');
+    }
+
     const goalId = this.generateGoalId();
     const now = new Date().toISOString();
 
@@ -103,6 +118,9 @@ export class GoalService {
    * Delete a goal and its folder.
    */
   async deleteGoal(goalId: string): Promise<void> {
+    // Validate goalId to prevent path traversal
+    this.validateGoalId(goalId);
+
     const path = this.getGoalPath(goalId);
     const exists = await this.vaultProvider.exists(path);
 
@@ -110,8 +128,9 @@ export class GoalService {
       throw new Error(`Goal not found: ${goalId}`);
     }
 
-    await this.vaultProvider.deleteFile(path);
-    // Note: Obsidian will automatically remove empty folders
+    // Delete the entire goal folder including all conversations and QA sessions
+    const folderPath = this.getGoalFolderPath(goalId);
+    await this.vaultProvider.deleteFolder(folderPath);
   }
 
   /**
@@ -213,5 +232,17 @@ export class GoalService {
    */
   private getGoalPath(goalId: string): string {
     return `${this.getGoalFolderPath(goalId)}/${GoalService.GOAL_FILENAME}`;
+  }
+
+  /**
+   * Validate goal ID to prevent path traversal attacks.
+   */
+  private validateGoalId(goalId: string): void {
+    if (!goalId || goalId.trim().length === 0) {
+      throw new Error('Goal ID cannot be empty');
+    }
+    if (goalId.includes('/') || goalId.includes('\\') || goalId.includes('..')) {
+      throw new Error('Invalid goal ID: cannot contain path separators or parent directory references');
+    }
   }
 }

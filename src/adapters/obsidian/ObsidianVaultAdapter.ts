@@ -1,5 +1,5 @@
 import type { FileInfo, IVaultProvider } from '@/ports/IVaultProvider';
-import { type App, TFile } from 'obsidian';
+import { type App, TFile, TFolder } from 'obsidian';
 
 /**
  * Real Obsidian implementation of IVaultProvider
@@ -61,6 +61,14 @@ export class ObsidianVaultAdapter implements IVaultProvider {
       throw new Error(`File not found: ${path}`);
     }
     await this.app.vault.delete(file);
+  }
+
+  async deleteFolder(path: string): Promise<void> {
+    const folder = this.app.vault.getAbstractFileByPath(path);
+    if (!folder || !(folder instanceof TFolder)) {
+      throw new Error(`Folder not found: ${path}`);
+    }
+    await this.app.vault.delete(folder, true);
   }
 
   private toFileInfo(file: TFile): FileInfo {

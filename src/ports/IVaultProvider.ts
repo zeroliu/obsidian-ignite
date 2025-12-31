@@ -82,4 +82,11 @@ export interface IVaultProvider {
    * @returns Promise resolving when file is deleted
    */
   deleteFile(path: string): Promise<void>;
+
+  /**
+   * Delete a folder and all its contents
+   * @param path - Full path to the folder to delete
+   * @returns Promise resolving when folder is deleted
+   */
+  deleteFolder(path: string): Promise<void>;
 }
