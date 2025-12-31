@@ -1,3 +1,4 @@
+import type { GoalDraft } from '@/domain/goal/BrainstormService';
 import type React from 'react';
 import { createContext, useContext, useState } from 'react';
 
@@ -8,6 +9,7 @@ import { createContext, useContext, useState } from 'react';
 export type Screen =
   | { type: 'home' }
   | { type: 'brainstorm' }
+  | { type: 'note-assignment'; goalDraft: GoalDraft }
   | { type: 'goal-detail'; goalId: string }
   | { type: 'discuss'; goalId: string; conversationId?: string }
   | { type: 'qa'; goalId: string };
@@ -102,4 +104,13 @@ export function isDiscussScreen(
  */
 export function isQAScreen(screen: Screen): screen is { type: 'qa'; goalId: string } {
   return screen.type === 'qa';
+}
+
+/**
+ * Type guard to check if screen is note assignment screen.
+ */
+export function isNoteAssignmentScreen(
+  screen: Screen,
+): screen is { type: 'note-assignment'; goalDraft: GoalDraft } {
+  return screen.type === 'note-assignment';
 }

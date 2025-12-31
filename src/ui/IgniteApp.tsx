@@ -5,12 +5,15 @@ import {
   isDiscussScreen,
   isGoalDetailScreen,
   isHomeScreen,
+  isNoteAssignmentScreen,
   isQAScreen,
   useRouter,
 } from '@/ui/Router';
 import { ErrorBoundary } from '@/ui/components/shared/ErrorBoundary';
+import { BrainstormScreen } from '@/ui/screens/BrainstormScreen';
 import { GoalDetailScreen } from '@/ui/screens/GoalDetailScreen';
 import { HomeScreen } from '@/ui/screens/HomeScreen';
+import { NoteAssignmentScreen } from '@/ui/screens/NoteAssignmentScreen';
 
 const IgniteAppContent: React.FC = () => {
   const { currentScreen } = useRouter();
@@ -24,16 +27,11 @@ const IgniteAppContent: React.FC = () => {
   }
 
   if (isBrainstormScreen(currentScreen)) {
-    return (
-      <div className="ignite-screen">
-        <div className="ignite-screen-content">
-          <div className="ignite-empty-state">
-            <h3 className="ignite-empty-state-title">Brainstorm Screen</h3>
-            <p className="ignite-empty-state-description">Coming in Phase 3</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <BrainstormScreen />;
+  }
+
+  if (isNoteAssignmentScreen(currentScreen)) {
+    return <NoteAssignmentScreen goalDraft={currentScreen.goalDraft} />;
   }
 
   if (isDiscussScreen(currentScreen)) {
