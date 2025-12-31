@@ -27,5 +27,8 @@ npm-debug.log*
 .env
 .env.local
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # Personal vault fixtures (contain personal data)
 src/test/fixtures/zeroliu*
