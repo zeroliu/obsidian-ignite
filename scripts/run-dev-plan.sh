@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Prevent macOS sleep during execution
+if [[ "$OSTYPE" == "darwin"* ]] && [ -z "$CAFFEINATED" ]; then
+  export CAFFEINATED=1
+  exec caffeinate -i "$0" "$@"
+fi
+
 # Usage: ./scripts/run-dev-plan.sh <path-to-dev-plan.md> [start-phase]
 PLAN_FILE="${1:-}"
 START_PHASE="${2:-}"
@@ -269,7 +275,7 @@ Output your review in this exact format:
 - [file:line] Suggestion for improvement
 
 ## Summary
-**VERDICT: PASS** or **VERDICT: FAIL**
+**VERDICT: PASS** or **VERDICT: FAIL** (REQUIRED - you MUST include exactly one of these)
 
 Brief explanation of the overall assessment.
 " --allowedTools "Read,Grep,Glob,Bash" 2>&1 | tee "$review_file"
@@ -286,21 +292,30 @@ Brief explanation of the overall assessment.
     return 2
   fi
 
-  # Validate verdict exists
-  if ! grep -qiE "VERDICT: (PASS|FAIL)" "$review_file"; then
-    warn "Code review did not produce a verdict"
-    rm -f "$review_file"
-    return 2
-  fi
-
-  # Check for PASS verdict
+  # Check for explicit PASS verdict
   if grep -qi "VERDICT: PASS" "$review_file"; then
     rm -f "$review_file"
     return 0
-  else
+  fi
+
+  # Check for explicit FAIL verdict
+  if grep -qi "VERDICT: FAIL" "$review_file"; then
     rm -f "$review_file"
     return 1
   fi
+
+  # No verdict - check if issues were found (implies FAIL)
+  # Look for issue lines in the format "- [file:line]" or "- **file:line**"
+  if grep -qE "^- \[|^- \*\*" "$review_file"; then
+    warn "No verdict but issues found - treating as FAIL"
+    rm -f "$review_file"
+    return 1
+  fi
+
+  # No verdict and no clear issues - incomplete
+  warn "Code review did not produce a verdict"
+  rm -f "$review_file"
+  return 2
 }
 
 # Auto-fix issues found in review
