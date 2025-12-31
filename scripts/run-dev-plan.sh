@@ -13,12 +13,68 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m'
 
 log() { echo -e "${GREEN}[$(date +'%H:%M:%S')]${NC} $1"; }
 warn() { echo -e "${YELLOW}[$(date +'%H:%M:%S')] WARNING:${NC} $1"; }
 error() { echo -e "${RED}[$(date +'%H:%M:%S')] ERROR:${NC} $1"; exit 1; }
 info() { echo -e "${BLUE}[$(date +'%H:%M:%S')]${NC} $1"; }
+claude_start() { echo -e "${CYAN}[$(date +'%H:%M:%S')] 🤖 CLAUDE:${NC} $1"; }
+claude_done() { echo -e "${MAGENTA}[$(date +'%H:%M:%S')] 🤖 CLAUDE:${NC} $1"; }
+
+# Run claude with logging and exit code handling
+# Usage: run_claude "operation_name" max_turns [other claude args...]
+run_claude() {
+  local operation_name="$1"
+  local max_turns="$2"
+  shift 2
+
+  # Extract allowed tools from args (macOS compatible)
+  local tools="default"
+  local args_str="$*"
+  if [[ "$args_str" == *"--allowedTools"* ]]; then
+    tools=$(echo "$args_str" | sed -n 's/.*--allowedTools "\([^"]*\)".*/\1/p')
+    [ -z "$tools" ] && tools=$(echo "$args_str" | sed -n 's/.*--allowedTools \([^ ]*\).*/\1/p')
+  fi
+
+  echo ""
+  echo "  ╔══════════════════════════════════════════════════════════════╗"
+  claude_start "Starting: $operation_name"
+  info "  │ Max turns: $max_turns"
+  info "  │ Tools: $tools"
+  echo "  ╚══════════════════════════════════════════════════════════════╝"
+
+  local start_time=$(date +%s)
+  local exit_code=0
+
+  # Run claude and capture exit code
+  claude "$@" --max-turns "$max_turns" || exit_code=$?
+
+  local end_time=$(date +%s)
+  local duration=$((end_time - start_time))
+  local minutes=$((duration / 60))
+  local seconds=$((duration % 60))
+
+  echo "  ╔══════════════════════════════════════════════════════════════╗"
+  if [ $exit_code -eq 0 ]; then
+    claude_done "✓ Completed: $operation_name (${minutes}m ${seconds}s)"
+  elif [ $exit_code -eq 1 ]; then
+    warn "⚠ Claude exited with warnings: $operation_name (${minutes}m ${seconds}s)"
+    info "  │ Exit code: $exit_code"
+  else
+    warn "✗ Claude hit max turns or error: $operation_name"
+    info "  │ Duration: ${minutes}m ${seconds}s"
+    info "  │ Exit code: $exit_code"
+    info "  │ Max turns was: $max_turns"
+    warn "  │ This may indicate the task needs more turns or got stuck"
+  fi
+  echo "  ╚══════════════════════════════════════════════════════════════╝"
+  echo ""
+
+  return $exit_code
+}
 
 usage() {
   echo "Usage: $0 <path-to-dev-plan.md> [start-phase]"
@@ -130,9 +186,8 @@ auto_fix_validation_errors() {
   local iteration=$1
   local validation_errors="$2"
 
-  log "Auto-fixing validation errors (iteration $iteration)..."
-
-  claude -p "
+  run_claude "Fix validation errors (iteration $iteration/$MAX_VALIDATION_ITERATIONS)" 20 \
+    -p "
 The code has validation errors that need to be fixed before it can be committed.
 
 ## VALIDATION ERRORS:
@@ -148,7 +203,7 @@ $validation_errors
 
 Focus on the specific file:line references in the errors.
 Do NOT add new features or refactor - only fix the errors listed above.
-" --allowedTools "Read,Edit,Write,Bash,Glob,Grep" --max-turns 20
+" --allowedTools "Read,Edit,Write,Bash,Glob,Grep"
 
   git add -A
 }
@@ -158,19 +213,26 @@ validation_and_fix_loop() {
   local iteration=1
   VALIDATION_OUTPUT=""
 
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log "VALIDATION LOOP: Starting (max $MAX_VALIDATION_ITERATIONS iterations)"
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
   while [ $iteration -le $MAX_VALIDATION_ITERATIONS ]; do
-    info "Validation iteration $iteration of $MAX_VALIDATION_ITERATIONS"
+    info "┌─ Validation iteration $iteration of $MAX_VALIDATION_ITERATIONS"
 
     if run_validation; then
-      log "✓ All validations PASSED"
+      log "└─ ✓ All validations PASSED on iteration $iteration"
+      log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       return 0
     fi
 
     if [ $iteration -eq $MAX_VALIDATION_ITERATIONS ]; then
-      error "Max validation iterations reached. Cannot proceed with failing checks."
+      error "Max validation iterations ($MAX_VALIDATION_ITERATIONS) reached. Cannot proceed with failing checks."
     fi
 
+    info "├─ Validation failed, attempting auto-fix..."
     auto_fix_validation_errors $iteration "$VALIDATION_OUTPUT"
+    info "└─ Fix attempt $iteration complete, re-validating..."
     ((iteration++))
   done
 }
@@ -180,9 +242,8 @@ validation_and_fix_loop() {
 run_local_review() {
   local review_file="/tmp/review_output_$$.txt"
 
-  log "Running local code review..."
-
-  claude -p "
+  run_claude "Code review" 10 \
+    -p "
 Please review my recent code changes and provide feedback on:
 - Code quality and best practices
 - Potential bugs or issues
@@ -210,7 +271,7 @@ Output your review in this exact format:
 **VERDICT: PASS** or **VERDICT: FAIL**
 
 Brief explanation of the overall assessment.
-" --allowedTools "Read,Grep,Glob,Bash" --max-turns 10 > "$review_file" 2>&1
+" --allowedTools "Read,Grep,Glob,Bash" > "$review_file" 2>&1
 
   # Store review output for use by auto-fix
   REVIEW_OUTPUT=$(cat "$review_file")
@@ -232,10 +293,9 @@ auto_fix_review_issues() {
   local iteration=$1
   local review_feedback="$2"
 
-  log "Auto-fixing review issues (iteration $iteration)..."
-
   # Pass the actual review feedback to the fix agent
-  claude -p "
+  run_claude "Fix review issues (iteration $iteration/$MAX_REVIEW_ITERATIONS)" 15 \
+    -p "
 The following code review found issues that need to be fixed.
 
 ## CODE REVIEW FEEDBACK:
@@ -250,7 +310,7 @@ $review_feedback
 6. After fixing, run: npm run check && npm run typecheck && npm run test
 
 Focus on the specific file:line references in the feedback.
-" --allowedTools "Read,Edit,Write,Bash,Glob,Grep" --max-turns 15
+" --allowedTools "Read,Edit,Write,Bash,Glob,Grep"
 
   git add -A
 }
@@ -260,21 +320,29 @@ review_and_fix_loop() {
   local iteration=1
   REVIEW_OUTPUT=""
 
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log "REVIEW LOOP: Starting (max $MAX_REVIEW_ITERATIONS iterations)"
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
   while [ $iteration -le $MAX_REVIEW_ITERATIONS ]; do
-    info "Review iteration $iteration of $MAX_REVIEW_ITERATIONS"
+    info "┌─ Review iteration $iteration of $MAX_REVIEW_ITERATIONS"
 
     if run_local_review; then
-      log "✓ Code review PASSED"
+      log "└─ ✓ Code review PASSED on iteration $iteration"
+      log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       return 0
     fi
 
     if [ $iteration -eq $MAX_REVIEW_ITERATIONS ]; then
-      warn "Max review iterations reached. Proceeding with warnings."
+      warn "└─ Max review iterations ($MAX_REVIEW_ITERATIONS) reached. Proceeding with warnings."
+      log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       return 0
     fi
 
+    info "├─ Review found issues, attempting auto-fix..."
     # Pass the captured review output to the fix agent
     auto_fix_review_issues $iteration "$REVIEW_OUTPUT"
+    info "└─ Fix attempt $iteration complete, re-reviewing..."
     ((iteration++))
   done
 }
@@ -285,7 +353,8 @@ check_implementation_complete() {
   local phase_num=$1
   local check_file="/tmp/completion_check_$$.txt"
 
-  claude -p "
+  run_claude "Check Phase $phase_num completion" 100 \
+    -p "
 Check if Phase $phase_num implementation is complete based on the plan at $PLAN_FILE.
 
 1. Read the plan file and identify all tasks for Phase $phase_num
@@ -297,7 +366,7 @@ Output EXACTLY one of these verdicts:
 - **VERDICT: INCOMPLETE** - Some tasks are missing (list them)
 
 Be thorough but concise.
-" --allowedTools "Read,Grep,Glob,Bash" --max-turns 10 > "$check_file" 2>&1
+" --allowedTools "Read,Grep,Glob,Bash" > "$check_file" 2>&1
 
   local result=0
   if grep -qi "VERDICT: COMPLETE" "$check_file"; then
@@ -319,9 +388,8 @@ continue_implementation() {
   local phase_name=$2
   local continuation=$3
 
-  log "Continuing implementation (continuation $continuation)..."
-
-  claude -p "
+  run_claude "Continue Phase $phase_num implementation (continuation $continuation/$MAX_IMPLEMENTATION_CONTINUATIONS)" 25 \
+    -p "
 Continue implementing Phase $phase_num: $phase_name from the plan at $PLAN_FILE.
 
 The previous implementation run may not have completed all tasks.
@@ -335,7 +403,7 @@ Instructions:
 
 Focus on completing unfinished work, not rewriting existing code.
 Stop when ALL Phase $phase_num tasks are complete.
-" --allowedTools "Read,Edit,Write,Bash,Glob,Grep,Task" --max-turns 25
+" --allowedTools "Read,Edit,Write,Bash,Glob,Grep,Task"
 
   git add -A
 }
@@ -344,9 +412,17 @@ run_phase() {
   local phase_num=$1
   local phase_name="${PHASES[$((phase_num-1))]}"
 
-  log "========================================"
-  log "Starting Phase $phase_num: $phase_name"
-  log "========================================"
+  log "════════════════════════════════════════════════════════════════════════════════"
+  log "PHASE $phase_num: $phase_name"
+  log "════════════════════════════════════════════════════════════════════════════════"
+  info ""
+  info "Workflow for this phase:"
+  info "  1. 🔨 Implementation       (max 300 turns)"
+  info "  2. 🔍 Completion check     (max 100 turns) × up to $MAX_IMPLEMENTATION_CONTINUATIONS continuations"
+  info "  3. ✅ Validation loop      (lint/type/test) × up to $MAX_VALIDATION_ITERATIONS iterations"
+  info "  4. 📋 Code review loop     (max 10 turns) × up to $MAX_REVIEW_ITERATIONS iterations"
+  info "  5. 🚀 Commit, PR, merge"
+  info ""
 
   # Create branch name from phase
   local branch_name="phase-$phase_num-$(echo "$phase_name" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')"
@@ -359,8 +435,8 @@ run_phase() {
   git checkout -b "$branch_name"
 
   # Run Claude Code to implement the phase
-  log "Running Claude Code for Phase $phase_num..."
-  claude -p "
+  run_claude "Implement Phase $phase_num: $phase_name" 300 \
+    -p "
 Read the development plan at $PLAN_FILE.
 
 Implement ONLY Phase $phase_num: $phase_name
@@ -377,25 +453,35 @@ Instructions:
 6. Fix any lint, type, or test errors before stopping
 
 Do NOT implement other phases. Stop when Phase $phase_num tasks are complete AND all checks pass.
-" --allowedTools "Read,Edit,Write,Bash,Glob,Grep,Task" --max-turns 30
+" --allowedTools "Read,Edit,Write,Bash,Glob,Grep,Task"
 
   git add -A
 
   # Check if implementation is complete, continue if needed
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log "COMPLETION CHECK: Verifying implementation completeness"
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
   local continuation=1
   while [ $continuation -le $MAX_IMPLEMENTATION_CONTINUATIONS ]; do
+    info "┌─ Completion check $continuation of $MAX_IMPLEMENTATION_CONTINUATIONS"
+
     if check_implementation_complete "$phase_num"; then
+      log "└─ ✓ Implementation complete"
       break
     fi
 
     if [ $continuation -eq $MAX_IMPLEMENTATION_CONTINUATIONS ]; then
-      warn "Max continuations reached. Proceeding with current implementation."
+      warn "└─ Max continuations ($MAX_IMPLEMENTATION_CONTINUATIONS) reached. Proceeding with current implementation."
       break
     fi
 
+    info "├─ Implementation incomplete, continuing..."
     continue_implementation "$phase_num" "$phase_name" "$continuation"
+    info "└─ Continuation $continuation complete, re-checking..."
     ((continuation++))
   done
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
   # Check for changes
   git add -A
@@ -471,14 +557,18 @@ Plan: \`$PLAN_FILE\`
   git checkout main
   git pull origin main
 
-  log "Phase $phase_num complete!"
+  log "════════════════════════════════════════════════════════════════════════════════"
+  log "✓ PHASE $phase_num COMPLETE: $phase_name"
+  log "════════════════════════════════════════════════════════════════════════════════"
 }
 
 main() {
-  log "========================================"
-  log "Development Plan Automation"
-  log "Plan: $PLAN_FILE"
-  log "========================================"
+  echo ""
+  log "════════════════════════════════════════════════════════════════════════════════"
+  log "🚀 DEVELOPMENT PLAN AUTOMATION"
+  log "════════════════════════════════════════════════════════════════════════════════"
+  info "Plan file: $PLAN_FILE"
+  info ""
 
   # Verify prerequisites
   command -v claude >/dev/null 2>&1 || error "Claude CLI not found"
@@ -493,7 +583,10 @@ main() {
 
   [ "$start_phase" -gt "$TOTAL_PHASES" ] && error "Start phase ($start_phase) exceeds total phases ($TOTAL_PHASES)"
 
+  info ""
   log "Starting from Phase $start_phase of $TOTAL_PHASES"
+  info "Remaining phases: $((TOTAL_PHASES - start_phase + 1))"
+  info ""
 
   for phase in $(seq "$start_phase" "$TOTAL_PHASES"); do
     run_phase "$phase"
@@ -503,9 +596,11 @@ main() {
   # Cleanup state file
   rm -f "$STATE_FILE"
 
-  log "========================================"
-  log "All $TOTAL_PHASES phases complete!"
-  log "========================================"
+  echo ""
+  log "════════════════════════════════════════════════════════════════════════════════"
+  log "🎉 ALL $TOTAL_PHASES PHASES COMPLETE!"
+  log "════════════════════════════════════════════════════════════════════════════════"
+  echo ""
 }
 
 main
