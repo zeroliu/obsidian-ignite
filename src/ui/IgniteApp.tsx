@@ -1,38 +1,74 @@
 import type React from 'react';
 
+import {
+  isBrainstormScreen,
+  isDiscussScreen,
+  isGoalDetailScreen,
+  isHomeScreen,
+  isQAScreen,
+  useRouter,
+} from '@/ui/Router';
 import { ErrorBoundary } from '@/ui/components/shared/ErrorBoundary';
+import { GoalDetailScreen } from '@/ui/screens/GoalDetailScreen';
+import { HomeScreen } from '@/ui/screens/HomeScreen';
 
 const IgniteAppContent: React.FC = () => {
+  const { currentScreen } = useRouter();
+
+  if (isHomeScreen(currentScreen)) {
+    return <HomeScreen />;
+  }
+
+  if (isGoalDetailScreen(currentScreen)) {
+    return <GoalDetailScreen goalId={currentScreen.goalId} />;
+  }
+
+  if (isBrainstormScreen(currentScreen)) {
+    return (
+      <div className="ignite-screen">
+        <div className="ignite-screen-content">
+          <div className="ignite-empty-state">
+            <h3 className="ignite-empty-state-title">Brainstorm Screen</h3>
+            <p className="ignite-empty-state-description">Coming in Phase 3</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isDiscussScreen(currentScreen)) {
+    return (
+      <div className="ignite-screen">
+        <div className="ignite-screen-content">
+          <div className="ignite-empty-state">
+            <h3 className="ignite-empty-state-title">Discuss Screen</h3>
+            <p className="ignite-empty-state-description">Coming in Phase 4</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isQAScreen(currentScreen)) {
+    return (
+      <div className="ignite-screen">
+        <div className="ignite-screen-content">
+          <div className="ignite-empty-state">
+            <h3 className="ignite-empty-state-title">Q&A Screen</h3>
+            <p className="ignite-empty-state-description">Coming in Phase 4</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ padding: 'var(--ignite-space-4)' }}>
-      <h2
-        style={{
-          color: 'var(--ignite-text)',
-          marginBottom: 'var(--ignite-space-2)',
-        }}
-      >
-        Ignite
-      </h2>
-      <p style={{ color: 'var(--ignite-text-muted)' }}>Plugin is loading...</p>
-      <div
-        style={{
-          marginTop: 'var(--ignite-space-4)',
-          padding: 'var(--ignite-space-3)',
-          backgroundColor: 'var(--ignite-bg-card)',
-          borderRadius: 'var(--ignite-radius-md)',
-          border: '1px solid var(--ignite-border)',
-        }}
-      >
-        <p style={{ color: 'var(--ignite-accent)' }}>React is working</p>
-        <p
-          style={{
-            color: 'var(--ignite-text-muted)',
-            fontSize: 'var(--ignite-font-size-sm)',
-            marginTop: 'var(--ignite-space-2)',
-          }}
-        >
-          CSS variables are mapped correctly
-        </p>
+    <div className="ignite-screen">
+      <div className="ignite-screen-content">
+        <div className="ignite-empty-state">
+          <h3 className="ignite-empty-state-title">Unknown Screen</h3>
+          <p className="ignite-empty-state-description">This screen type is not recognized.</p>
+        </div>
       </div>
     </div>
   );
