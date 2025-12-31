@@ -5,6 +5,8 @@ set -e
 PLAN_FILE="${1:-}"
 START_PHASE="${2:-}"
 MAX_REVIEW_ITERATIONS=3
+MAX_VALIDATION_ITERATIONS=5
+MAX_IMPLEMENTATION_CONTINUATIONS=3
 
 # Colors
 GREEN='\033[0;32m'
@@ -79,6 +81,100 @@ save_phase() {
   echo "$1" > "$STATE_FILE"
 }
 
+# Run validation checks (lint + typecheck + tests)
+# Returns 0 if all pass, 1 if any fail
+# Sets VALIDATION_OUTPUT with error details
+run_validation() {
+  local output_file="/tmp/validation_output_$$.txt"
+  VALIDATION_OUTPUT=""
+
+  log "Running validation checks..."
+
+  # Run all checks and capture output
+  local has_errors=0
+
+  # Lint check
+  info "  Running lint check..."
+  if ! npm run check > "$output_file" 2>&1; then
+    VALIDATION_OUTPUT+="## Lint Errors\n$(cat "$output_file")\n\n"
+    has_errors=1
+  fi
+
+  # Type check
+  info "  Running type check..."
+  if ! npm run typecheck > "$output_file" 2>&1; then
+    VALIDATION_OUTPUT+="## Type Errors\n$(cat "$output_file")\n\n"
+    has_errors=1
+  fi
+
+  # Tests
+  info "  Running tests..."
+  if ! npm run test > "$output_file" 2>&1; then
+    VALIDATION_OUTPUT+="## Test Failures\n$(cat "$output_file")\n\n"
+    has_errors=1
+  fi
+
+  rm -f "$output_file"
+
+  if [ $has_errors -eq 0 ]; then
+    log "✓ All validation checks passed"
+    return 0
+  else
+    warn "Validation checks failed"
+    return 1
+  fi
+}
+
+# Auto-fix validation errors using Claude
+auto_fix_validation_errors() {
+  local iteration=$1
+  local validation_errors="$2"
+
+  log "Auto-fixing validation errors (iteration $iteration)..."
+
+  claude -p "
+The code has validation errors that need to be fixed before it can be committed.
+
+## VALIDATION ERRORS:
+$validation_errors
+
+## INSTRUCTIONS:
+1. Read the error messages above carefully
+2. Fix ALL lint errors (these block commits)
+3. Fix ALL type errors
+4. Fix ALL test failures
+5. Follow CLAUDE.md guidelines strictly
+6. After fixing, verify by running: npm run check && npm run typecheck && npm run test
+
+Focus on the specific file:line references in the errors.
+Do NOT add new features or refactor - only fix the errors listed above.
+" --allowedTools "Read,Edit,Write,Bash,Glob,Grep" --max-turns 20
+
+  git add -A
+}
+
+# Validation loop: validate -> fix -> validate until pass or max iterations
+validation_and_fix_loop() {
+  local iteration=1
+  VALIDATION_OUTPUT=""
+
+  while [ $iteration -le $MAX_VALIDATION_ITERATIONS ]; do
+    info "Validation iteration $iteration of $MAX_VALIDATION_ITERATIONS"
+
+    if run_validation; then
+      log "✓ All validations PASSED"
+      return 0
+    fi
+
+    if [ $iteration -eq $MAX_VALIDATION_ITERATIONS ]; then
+      error "Max validation iterations reached. Cannot proceed with failing checks."
+    fi
+
+    auto_fix_validation_errors $iteration "$VALIDATION_OUTPUT"
+    ((iteration++))
+  done
+}
+
 # Run local code review using Claude CLI
 # Outputs review to REVIEW_OUTPUT variable and returns 0 for PASS, 1 for FAIL
 run_local_review() {
@@ -151,7 +247,7 @@ $review_feedback
 3. Fix ALL Warnings (these should be fixed)
 4. Suggestions are optional but encouraged
 5. Follow CLAUDE.md guidelines strictly
-6. After fixing, run: npm run test && npm run typecheck
+6. After fixing, run: npm run check && npm run typecheck && npm run test
 
 Focus on the specific file:line references in the feedback.
 " --allowedTools "Read,Edit,Write,Bash,Glob,Grep" --max-turns 15
@@ -181,6 +277,67 @@ review_and_fix_loop() {
     auto_fix_review_issues $iteration "$REVIEW_OUTPUT"
     ((iteration++))
   done
+}
+
+# Check if implementation appears complete
+# Returns 0 if complete, 1 if incomplete
+check_implementation_complete() {
+  local phase_num=$1
+  local check_file="/tmp/completion_check_$$.txt"
+
+  claude -p "
+Check if Phase $phase_num implementation is complete based on the plan at $PLAN_FILE.
+
+1. Read the plan file and identify all tasks for Phase $phase_num
+2. Check the current codebase to see what has been implemented
+3. Run git diff to see current changes
+
+Output EXACTLY one of these verdicts:
+- **VERDICT: COMPLETE** - All tasks for Phase $phase_num are implemented
+- **VERDICT: INCOMPLETE** - Some tasks are missing (list them)
+
+Be thorough but concise.
+" --allowedTools "Read,Grep,Glob,Bash" --max-turns 10 > "$check_file" 2>&1
+
+  local result=0
+  if grep -qi "VERDICT: COMPLETE" "$check_file"; then
+    log "✓ Implementation appears complete"
+    result=0
+  else
+    warn "Implementation may be incomplete"
+    cat "$check_file"
+    result=1
+  fi
+
+  rm -f "$check_file"
+  return $result
+}
+
+# Continue implementation if incomplete
+continue_implementation() {
+  local phase_num=$1
+  local phase_name=$2
+  local continuation=$3
+
+  log "Continuing implementation (continuation $continuation)..."
+
+  claude -p "
+Continue implementing Phase $phase_num: $phase_name from the plan at $PLAN_FILE.
+
+The previous implementation run may not have completed all tasks.
+
+Instructions:
+1. Read the plan to understand what Phase $phase_num requires
+2. Check git diff to see what has already been implemented
+3. Identify and implement any REMAINING tasks for this phase
+4. Follow CLAUDE.md guidelines strictly
+5. Run npm run check && npm run typecheck && npm run test before finishing
+
+Focus on completing unfinished work, not rewriting existing code.
+Stop when ALL Phase $phase_num tasks are complete.
+" --allowedTools "Read,Edit,Write,Bash,Glob,Grep,Task" --max-turns 25
+
+  git add -A
 }
 
 run_phase() {
@@ -213,10 +370,32 @@ Instructions:
 2. Focus ONLY on tasks listed under 'Phase $phase_num: $phase_name'
 3. Follow CLAUDE.md guidelines strictly
 4. Check the Success Criteria for this phase
-5. Run tests after implementation
+5. IMPORTANT: Before finishing, you MUST run and ensure these pass:
+   - npm run check (lint)
+   - npm run typecheck
+   - npm run test
+6. Fix any lint, type, or test errors before stopping
 
-Do NOT implement other phases. Stop when Phase $phase_num tasks are complete.
-" --allowedTools "Read,Edit,Write,Bash,Glob,Grep,Task" --max-turns 25
+Do NOT implement other phases. Stop when Phase $phase_num tasks are complete AND all checks pass.
+" --allowedTools "Read,Edit,Write,Bash,Glob,Grep,Task" --max-turns 30
+
+  git add -A
+
+  # Check if implementation is complete, continue if needed
+  local continuation=1
+  while [ $continuation -le $MAX_IMPLEMENTATION_CONTINUATIONS ]; do
+    if check_implementation_complete "$phase_num"; then
+      break
+    fi
+
+    if [ $continuation -eq $MAX_IMPLEMENTATION_CONTINUATIONS ]; then
+      warn "Max continuations reached. Proceeding with current implementation."
+      break
+    fi
+
+    continue_implementation "$phase_num" "$phase_name" "$continuation"
+    ((continuation++))
+  done
 
   # Check for changes
   git add -A
@@ -227,21 +406,34 @@ Do NOT implement other phases. Stop when Phase $phase_num tasks are complete.
     return 0
   fi
 
-  # Commit implementation
+  # Run validation loop BEFORE committing (this prevents pre-commit hook failures)
+  log "Running pre-commit validation..."
+  validation_and_fix_loop
+
+  # Stage any fixes from validation
+  git add -A
+
+  # Commit implementation (now hooks should pass)
+  log "Committing changes..."
   git commit -m "Phase $phase_num: $phase_name
 
 🤖 Generated with [Claude Code](https://claude.ai/code)
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
 
-  # Run local review loop
+  # Run local code review loop
   log "Starting code review..."
   review_and_fix_loop
 
-  # Amend with review fixes if any
-  git add -A
-  if ! git diff --staged --quiet; then
-    git commit --amend --no-edit
+  # Run validation again after review fixes
+  if ! git diff --staged --quiet || ! git diff --quiet; then
+    git add -A
+    if ! git diff --staged --quiet; then
+      log "Validating review fixes..."
+      validation_and_fix_loop
+      git add -A
+      git commit --amend --no-edit
+    fi
   fi
 
   # Push and create PR
@@ -254,12 +446,16 @@ Automated implementation of Phase $phase_num: $phase_name
 
 Plan: \`$PLAN_FILE\`
 
-## Local Review
-✓ Passed local code review
+## Checks
+- ✅ Lint check passed
+- ✅ Type check passed
+- ✅ Tests passed
+- ✅ Local code review passed
 
 ## Test Plan
-- [x] Tests pass
+- [x] Automated tests pass
 - [x] Type check passes
+- [x] Lint check passes
 - [ ] Manual testing
 
 🤖 Generated with [Claude Code](https://claude.ai/code)" \
@@ -287,6 +483,7 @@ main() {
   # Verify prerequisites
   command -v claude >/dev/null 2>&1 || error "Claude CLI not found"
   command -v gh >/dev/null 2>&1 || error "GitHub CLI not found"
+  command -v npm >/dev/null 2>&1 || error "npm not found"
   gh auth status >/dev/null 2>&1 || error "GitHub CLI not authenticated"
 
   # Parse the plan file
