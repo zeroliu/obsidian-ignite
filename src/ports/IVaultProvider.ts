@@ -52,4 +52,34 @@ export interface IVaultProvider {
    * @returns Folder path (empty string for root files)
    */
   getFolder(path: string): string;
+
+  /**
+   * Create a new file with content
+   * @param path - Full path to the file to create
+   * @param content - File content
+   * @returns Promise resolving when file is created
+   */
+  createFile(path: string, content: string): Promise<void>;
+
+  /**
+   * Modify an existing file with new content
+   * @param path - Full path to the file to modify
+   * @param content - New file content
+   * @returns Promise resolving when file is modified
+   */
+  modifyFile(path: string, content: string): Promise<void>;
+
+  /**
+   * Create a folder (and parent folders if they don't exist)
+   * @param path - Full path to the folder to create
+   * @returns Promise resolving when folder is created
+   */
+  createFolder(path: string): Promise<void>;
+
+  /**
+   * Delete a file
+   * @param path - Full path to the file to delete
+   * @returns Promise resolving when file is deleted
+   */
+  deleteFile(path: string): Promise<void>;
 }

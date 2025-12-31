@@ -5,7 +5,15 @@
  * Reads markdown files directly from the filesystem.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { FileInfo, IVaultProvider } from '@/ports/IVaultProvider';
 
@@ -90,5 +98,40 @@ export class FileSystemVaultAdapter implements IVaultProvider {
     const parts = path.split('/');
     parts.pop(); // Remove filename
     return parts.join('/');
+  }
+
+  async createFile(path: string, content: string): Promise<void> {
+    const fullPath = join(this.vaultPath, path);
+    const folderPath = dirname(fullPath);
+
+    // Create parent folder if it doesn't exist
+    if (!existsSync(folderPath)) {
+      mkdirSync(folderPath, { recursive: true });
+    }
+
+    writeFileSync(fullPath, content, 'utf-8');
+  }
+
+  async modifyFile(path: string, content: string): Promise<void> {
+    const fullPath = join(this.vaultPath, path);
+    if (!existsSync(fullPath)) {
+      throw new Error(`File not found: ${path}`);
+    }
+    writeFileSync(fullPath, content, 'utf-8');
+  }
+
+  async createFolder(path: string): Promise<void> {
+    const fullPath = join(this.vaultPath, path);
+    if (!existsSync(fullPath)) {
+      mkdirSync(fullPath, { recursive: true });
+    }
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    const fullPath = join(this.vaultPath, path);
+    if (!existsSync(fullPath)) {
+      throw new Error(`File not found: ${path}`);
+    }
+    unlinkSync(fullPath);
   }
 }

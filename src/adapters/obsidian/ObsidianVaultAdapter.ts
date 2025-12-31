@@ -36,6 +36,33 @@ export class ObsidianVaultAdapter implements IVaultProvider {
     return parts.join('/');
   }
 
+  async createFile(path: string, content: string): Promise<void> {
+    await this.app.vault.create(path, content);
+  }
+
+  async modifyFile(path: string, content: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!file || !(file instanceof TFile)) {
+      throw new Error(`File not found: ${path}`);
+    }
+    await this.app.vault.modify(file, content);
+  }
+
+  async createFolder(path: string): Promise<void> {
+    const exists = await this.exists(path);
+    if (!exists) {
+      await this.app.vault.createFolder(path);
+    }
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!file || !(file instanceof TFile)) {
+      throw new Error(`File not found: ${path}`);
+    }
+    await this.app.vault.delete(file);
+  }
+
   private toFileInfo(file: TFile): FileInfo {
     return {
       path: file.path,

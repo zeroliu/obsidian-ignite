@@ -62,3 +62,21 @@ export function filterExcludedPaths<T extends { path: string }>(
 
   return { included, excludedCount };
 }
+
+/**
+ * Filter an array of files, keeping only those matching include patterns
+ *
+ * @param files - Array of objects with path property
+ * @param patterns - Array of glob patterns to include
+ * @returns Filtered array (returns all files if patterns is empty)
+ */
+export function filterByIncludePatterns<T extends { path: string }>(
+  files: T[],
+  patterns: string[],
+): T[] {
+  if (patterns.length === 0) {
+    return files;
+  }
+
+  return files.filter((file) => micromatch.isMatch(file.path, patterns, { dot: true }));
+}

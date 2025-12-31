@@ -7,6 +7,10 @@ import { type App, PluginSettingTab, Setting } from 'obsidian';
 export interface IgniteSettings {
   /** Anthropic API key for LLM features */
   anthropicApiKey: string;
+  /** Glob patterns for files to include (e.g., "notes/**", "projects/*.md") */
+  includePaths: string[];
+  /** Glob patterns for files to exclude (e.g., "templates/**", "archive/**") */
+  excludePaths: string[];
 }
 
 /**
@@ -14,6 +18,8 @@ export interface IgniteSettings {
  */
 export const DEFAULT_SETTINGS: IgniteSettings = {
   anthropicApiKey: '',
+  includePaths: [],
+  excludePaths: [],
 };
 
 /**
@@ -54,6 +60,57 @@ export class IgniteSettingsTab extends PluginSettingTab {
         if (inputEl) {
           inputEl.type = 'password';
           inputEl.autocomplete = 'off';
+        }
+      });
+
+    // Path filtering section
+    containerEl.createEl('h3', { text: 'Note Filtering' });
+
+    new Setting(containerEl)
+      .setName('Include paths')
+      .setDesc(
+        'Glob patterns for files to include (one per line). Leave empty to include all files. Examples: "notes/**", "projects/*.md"',
+      )
+      .addTextArea((text) =>
+        text
+          .setPlaceholder('notes/**\nprojects/*.md')
+          .setValue(this.plugin.settings.includePaths.join('\n'))
+          .onChange(async (value) => {
+            this.plugin.settings.includePaths = value
+              .split('\n')
+              .map((line) => line.trim())
+              .filter((line) => line.length > 0);
+            await this.plugin.saveSettings();
+          }),
+      )
+      .then((setting) => {
+        const textAreaEl = setting.controlEl.querySelector('textarea');
+        if (textAreaEl) {
+          textAreaEl.rows = 4;
+        }
+      });
+
+    new Setting(containerEl)
+      .setName('Exclude paths')
+      .setDesc(
+        'Glob patterns for files to exclude (one per line). Examples: "templates/**", "archive/**", "*.excalidraw.md"',
+      )
+      .addTextArea((text) =>
+        text
+          .setPlaceholder('templates/**\narchive/**\n*.excalidraw.md')
+          .setValue(this.plugin.settings.excludePaths.join('\n'))
+          .onChange(async (value) => {
+            this.plugin.settings.excludePaths = value
+              .split('\n')
+              .map((line) => line.trim())
+              .filter((line) => line.length > 0);
+            await this.plugin.saveSettings();
+          }),
+      )
+      .then((setting) => {
+        const textAreaEl = setting.controlEl.querySelector('textarea');
+        if (textAreaEl) {
+          textAreaEl.rows = 4;
         }
       });
 

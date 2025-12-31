@@ -14,3 +14,10 @@ export type {
   EmbeddingResult,
   IEmbeddingProvider,
 } from './IEmbeddingProvider';
+export type {
+  ILLMProvider,
+  LLMChatOptions,
+  LLMMessage,
+  LLMResponse,
+  LLMStreamCallbacks,
+} from './ILLMProvider';
