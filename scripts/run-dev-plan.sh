@@ -49,8 +49,8 @@ run_claude() {
   local start_time=$(date +%s)
   local exit_code=0
 
-  # Run claude and capture exit code
-  claude "$@" --max-turns "$max_turns" || exit_code=$?
+  # Run claude and capture exit code (--verbose shows tool calls and reasoning)
+  claude --verbose "$@" --max-turns "$max_turns" || exit_code=$?
 
   local end_time=$(date +%s)
   local duration=$((end_time - start_time))
@@ -186,7 +186,7 @@ auto_fix_validation_errors() {
   local iteration=$1
   local validation_errors="$2"
 
-  run_claude "Fix validation errors (iteration $iteration/$MAX_VALIDATION_ITERATIONS)" 100 \
+  run_claude "Fix validation errors (iteration $iteration/$MAX_VALIDATION_ITERATIONS)" 300 \
     -p "
 The code has validation errors that need to be fixed before it can be committed.
 
@@ -238,11 +238,12 @@ validation_and_fix_loop() {
 }
 
 # Run local code review using Claude CLI
-# Outputs review to REVIEW_OUTPUT variable and returns 0 for PASS, 1 for FAIL
+# Outputs review to REVIEW_OUTPUT variable
+# Returns: 0 for PASS, 1 for FAIL (issues found), 2 for incomplete (agent hit max turns or no verdict)
 run_local_review() {
   local review_file="/tmp/review_output_$$.txt"
 
-  run_claude "Code review" 100 \
+  run_claude "Code review" 300 \
     -p "
 Please review my recent code changes and provide feedback on:
 - Code quality and best practices
@@ -271,11 +272,26 @@ Output your review in this exact format:
 **VERDICT: PASS** or **VERDICT: FAIL**
 
 Brief explanation of the overall assessment.
-" --allowedTools "Read,Grep,Glob,Bash" > "$review_file" 2>&1
+" --allowedTools "Read,Grep,Glob,Bash" 2>&1 | tee "$review_file"
+
+  local claude_exit=${PIPESTATUS[0]}
 
   # Store review output for use by auto-fix
   REVIEW_OUTPUT=$(cat "$review_file")
-  echo "$REVIEW_OUTPUT"
+
+  # Check if Claude hit max turns or errored
+  if [ $claude_exit -eq 2 ]; then
+    warn "Code review agent hit max turns - review incomplete"
+    rm -f "$review_file"
+    return 2
+  fi
+
+  # Validate verdict exists
+  if ! grep -qiE "VERDICT: (PASS|FAIL)" "$review_file"; then
+    warn "Code review did not produce a verdict"
+    rm -f "$review_file"
+    return 2
+  fi
 
   # Check for PASS verdict
   if grep -qi "VERDICT: PASS" "$review_file"; then
@@ -294,7 +310,7 @@ auto_fix_review_issues() {
   local review_feedback="$2"
 
   # Pass the actual review feedback to the fix agent
-  run_claude "Fix review issues (iteration $iteration/$MAX_REVIEW_ITERATIONS)" 100 \
+  run_claude "Fix review issues (iteration $iteration/$MAX_REVIEW_ITERATIONS)" 300 \
     -p "
 The following code review found issues that need to be fixed.
 
@@ -327,12 +343,28 @@ review_and_fix_loop() {
   while [ $iteration -le $MAX_REVIEW_ITERATIONS ]; do
     info "┌─ Review iteration $iteration of $MAX_REVIEW_ITERATIONS"
 
-    if run_local_review; then
+    run_local_review
+    local review_result=$?
+
+    if [ $review_result -eq 0 ]; then
       log "└─ ✓ Code review PASSED on iteration $iteration"
       log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       return 0
     fi
 
+    if [ $review_result -eq 2 ]; then
+      warn "└─ Review agent incomplete (hit max turns or no verdict)"
+      if [ $iteration -eq $MAX_REVIEW_ITERATIONS ]; then
+        warn "  │ Skipping review due to repeated agent issues"
+        log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        return 0
+      fi
+      info "├─ Retrying review..."
+      ((iteration++))
+      continue
+    fi
+
+    # review_result -eq 1: Review found issues
     if [ $iteration -eq $MAX_REVIEW_ITERATIONS ]; then
       warn "└─ Max review iterations ($MAX_REVIEW_ITERATIONS) reached. Proceeding with warnings."
       log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -348,12 +380,12 @@ review_and_fix_loop() {
 }
 
 # Check if implementation appears complete
-# Returns 0 if complete, 1 if incomplete
+# Returns 0 if complete, 1 if incomplete, 2 if agent didn't finish
 check_implementation_complete() {
   local phase_num=$1
   local check_file="/tmp/completion_check_$$.txt"
 
-  run_claude "Check Phase $phase_num completion" 100 \
+  run_claude "Check Phase $phase_num completion" 300 \
     -p "
 Check if Phase $phase_num implementation is complete based on the plan at $PLAN_FILE.
 
@@ -366,7 +398,23 @@ Output EXACTLY one of these verdicts:
 - **VERDICT: INCOMPLETE** - Some tasks are missing (list them)
 
 Be thorough but concise.
-" --allowedTools "Read,Grep,Glob,Bash" > "$check_file" 2>&1
+" --allowedTools "Read,Grep,Glob,Bash" 2>&1 | tee "$check_file"
+
+  local claude_exit=${PIPESTATUS[0]}
+
+  # Check if Claude hit max turns or errored
+  if [ $claude_exit -eq 2 ]; then
+    warn "Completion check agent hit max turns - check incomplete"
+    rm -f "$check_file"
+    return 2
+  fi
+
+  # Validate verdict exists
+  if ! grep -qiE "VERDICT: (COMPLETE|INCOMPLETE)" "$check_file"; then
+    warn "Completion check did not produce a verdict"
+    rm -f "$check_file"
+    return 2
+  fi
 
   local result=0
   if grep -qi "VERDICT: COMPLETE" "$check_file"; then
@@ -388,7 +436,7 @@ continue_implementation() {
   local phase_name=$2
   local continuation=$3
 
-  run_claude "Continue Phase $phase_num implementation (continuation $continuation/$MAX_IMPLEMENTATION_CONTINUATIONS)" 100 \
+  run_claude "Continue Phase $phase_num implementation (continuation $continuation/$MAX_IMPLEMENTATION_CONTINUATIONS)" 300 \
     -p "
 Continue implementing Phase $phase_num: $phase_name from the plan at $PLAN_FILE.
 
@@ -466,11 +514,26 @@ Do NOT implement other phases. Stop when Phase $phase_num tasks are complete AND
   while [ $continuation -le $MAX_IMPLEMENTATION_CONTINUATIONS ]; do
     info "┌─ Completion check $continuation of $MAX_IMPLEMENTATION_CONTINUATIONS"
 
-    if check_implementation_complete "$phase_num"; then
+    check_implementation_complete "$phase_num"
+    local check_result=$?
+
+    if [ $check_result -eq 0 ]; then
       log "└─ ✓ Implementation complete"
       break
     fi
 
+    if [ $check_result -eq 2 ]; then
+      warn "├─ Completion check agent incomplete (hit max turns or no verdict)"
+      if [ $continuation -eq $MAX_IMPLEMENTATION_CONTINUATIONS ]; then
+        warn "└─ Skipping completion check due to repeated agent issues"
+        break
+      fi
+      info "├─ Retrying completion check..."
+      ((continuation++))
+      continue
+    fi
+
+    # check_result -eq 1: Implementation incomplete
     if [ $continuation -eq $MAX_IMPLEMENTATION_CONTINUATIONS ]; then
       warn "└─ Max continuations ($MAX_IMPLEMENTATION_CONTINUATIONS) reached. Proceeding with current implementation."
       break
