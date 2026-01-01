@@ -19,7 +19,7 @@ export default class IgnitePlugin extends Plugin {
     this.addSettingTab(new IgniteSettingsTab(this.app, this));
 
     // Register the Ignite view
-    this.registerView(IGNITE_VIEW_TYPE, (leaf) => new IgniteView(leaf));
+    this.registerView(IGNITE_VIEW_TYPE, (leaf) => new IgniteView(leaf, this.settings));
 
     // Add ribbon icon to open Ignite
     this.addRibbonIcon('flame', 'Open Ignite', () => {

@@ -27,6 +27,7 @@
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@testing-library/react": "^16.3.1",
     "@types/micromatch": "^4.0.10",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.27",

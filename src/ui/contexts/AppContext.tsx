@@ -1,4 +1,4 @@
-import type { IMetadataProvider, IStorageAdapter, IVaultProvider } from '@/ports';
+import type { ILLMProvider, IMetadataProvider, IStorageAdapter, IVaultProvider } from '@/ports';
 import type { IgniteSettings } from '@/settings';
 import type React from 'react';
 import { createContext, useContext } from 'react';
@@ -10,6 +10,7 @@ export interface AppContextValue {
   vaultProvider: IVaultProvider;
   storageAdapter: IStorageAdapter;
   metadataProvider: IMetadataProvider;
+  llmProvider: ILLMProvider;
   settings: IgniteSettings;
 }
 

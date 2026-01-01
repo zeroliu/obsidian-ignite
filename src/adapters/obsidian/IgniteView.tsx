@@ -1,10 +1,17 @@
-import { ItemView } from 'obsidian';
+import type { IgniteSettings } from '@/settings';
+import { ItemView, type WorkspaceLeaf } from 'obsidian';
 import type { Root } from 'react-dom/client';
 
 export const IGNITE_VIEW_TYPE = 'ignite-view';
 
 export class IgniteView extends ItemView {
   private root: Root | null = null;
+  private settings: IgniteSettings;
+
+  constructor(leaf: WorkspaceLeaf, settings: IgniteSettings) {
+    super(leaf);
+    this.settings = settings;
+  }
 
   getViewType(): string {
     return IGNITE_VIEW_TYPE;
@@ -31,12 +38,32 @@ export class IgniteView extends ItemView {
 
     // Dynamic import to ensure React is loaded
     const { createRoot } = await import('react-dom/client');
-    const { IgniteApp } = await import('@/ui/IgniteApp');
+    const { IgniteRoot } = await import('@/ui/IgniteApp');
+    const { ObsidianVaultAdapter } = await import('./ObsidianVaultAdapter');
+    const { ObsidianStorageAdapter } = await import('./ObsidianStorageAdapter');
+    const { ObsidianMetadataAdapter } = await import('./ObsidianMetadataAdapter');
+    const { AnthropicLLMAdapter } = await import('@/adapters/anthropic');
+
+    // Create adapters
+    const vaultProvider = new ObsidianVaultAdapter(this.app);
+    const storageAdapter = new ObsidianStorageAdapter(this.app);
+    const metadataProvider = new ObsidianMetadataAdapter(this.app);
+    const llmProvider = new AnthropicLLMAdapter({
+      apiKey: this.settings.anthropicApiKey,
+    });
+
+    const appContext = {
+      vaultProvider,
+      storageAdapter,
+      metadataProvider,
+      llmProvider,
+      settings: this.settings,
+    };
 
     // Remove loading state and mount React
     loadingEl.remove();
     this.root = createRoot(container as HTMLElement);
-    this.root.render(<IgniteApp />);
+    this.root.render(<IgniteRoot appContext={appContext} />);
   }
 
   async onClose(): Promise<void> {
