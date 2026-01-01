@@ -1,10 +1,18 @@
-import type { Goal } from '@/domain/goal/types';
+import { ConversationService } from '@/domain/goal/ConversationService';
+import { QAService } from '@/domain/goal/QAService';
+import type { Conversation, Goal, QASession } from '@/domain/goal/types';
 import { useRouter } from '@/ui/Router';
 import { ActionCard } from '@/ui/components/goal/ActionCard';
+import { ConversationList } from '@/ui/components/goal/ConversationList';
 import { MilestoneList } from '@/ui/components/goal/MilestoneList';
+import { QASessionList } from '@/ui/components/goal/QASessionList';
 import { Button } from '@/ui/components/shared/Button';
+import { LoadingSpinner } from '@/ui/components/shared/LoadingSpinner';
 import { ProgressBar } from '@/ui/components/shared/ProgressBar';
+import { useApp } from '@/ui/contexts/AppContext';
 import { useGoals } from '@/ui/contexts/GoalContext';
+import { useLLM } from '@/ui/contexts/LLMContext';
+import { useEffect, useState } from 'react';
 
 /**
  * GoalDetailScreen component props.
@@ -19,8 +27,41 @@ export interface GoalDetailScreenProps {
 export function GoalDetailScreen({ goalId }: GoalDetailScreenProps) {
   const { goals, updateGoal } = useGoals();
   const { navigate, goBack } = useRouter();
+  const { vaultProvider } = useApp();
+  const { llmProvider } = useLLM();
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [qaSessions, setQASessions] = useState<QASession[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
 
   const goal = goals.find((g: Goal) => g.id === goalId);
+
+  // Load conversations and Q&A sessions
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!goal) return;
+
+      setIsLoadingHistory(true);
+      try {
+        const conversationService = new ConversationService(vaultProvider, llmProvider);
+        const qaService = new QAService(vaultProvider, llmProvider);
+
+        const [loadedConversations, loadedSessions] = await Promise.all([
+          conversationService.getConversationsForGoal(goalId),
+          qaService.getSessionsForGoal(goalId),
+        ]);
+
+        setConversations(loadedConversations);
+        setQASessions(loadedSessions);
+      } catch (error) {
+        console.error('Failed to load history:', error);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    loadHistory();
+  }, [goalId, goal, vaultProvider, llmProvider]);
 
   if (!goal) {
     return (
@@ -60,7 +101,16 @@ export function GoalDetailScreen({ goalId }: GoalDetailScreenProps) {
     navigate({ type: 'discuss', goalId: goal.id });
   };
 
+  const handleSelectConversation = (conversationId: string) => {
+    navigate({ type: 'discuss', goalId: goal.id, conversationId });
+  };
+
   const handleQA = () => {
+    navigate({ type: 'qa', goalId: goal.id });
+  };
+
+  const handleSelectSession = (_sessionId: string) => {
+    // For now, just start a new session. In the future, this could resume an incomplete session.
     navigate({ type: 'qa', goalId: goal.id });
   };
 
@@ -130,6 +180,30 @@ export function GoalDetailScreen({ goalId }: GoalDetailScreenProps) {
               onClick={handleQA}
             />
           </div>
+        </div>
+
+        <div className="ignite-goal-detail-section">
+          <h3 className="ignite-goal-detail-section-title">Discussion History</h3>
+          {isLoadingHistory ? (
+            <div className="ignite-loading-inline">
+              <LoadingSpinner size="sm" />
+              <span>Loading discussions...</span>
+            </div>
+          ) : (
+            <ConversationList conversations={conversations} onSelect={handleSelectConversation} />
+          )}
+        </div>
+
+        <div className="ignite-goal-detail-section">
+          <h3 className="ignite-goal-detail-section-title">Q&A History</h3>
+          {isLoadingHistory ? (
+            <div className="ignite-loading-inline">
+              <LoadingSpinner size="sm" />
+              <span>Loading sessions...</span>
+            </div>
+          ) : (
+            <QASessionList sessions={qaSessions} onSelect={handleSelectSession} />
+          )}
         </div>
 
         {goal.notesPaths.length > 0 && (

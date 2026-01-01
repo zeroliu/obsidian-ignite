@@ -11,9 +11,11 @@ import {
 } from '@/ui/Router';
 import { ErrorBoundary } from '@/ui/components/shared/ErrorBoundary';
 import { BrainstormScreen } from '@/ui/screens/BrainstormScreen';
+import { DiscussScreen } from '@/ui/screens/DiscussScreen';
 import { GoalDetailScreen } from '@/ui/screens/GoalDetailScreen';
 import { HomeScreen } from '@/ui/screens/HomeScreen';
 import { NoteAssignmentScreen } from '@/ui/screens/NoteAssignmentScreen';
+import { QAScreen } from '@/ui/screens/QAScreen';
 
 const IgniteAppContent: React.FC = () => {
   const { currentScreen } = useRouter();
@@ -36,28 +38,12 @@ const IgniteAppContent: React.FC = () => {
 
   if (isDiscussScreen(currentScreen)) {
     return (
-      <div className="ignite-screen">
-        <div className="ignite-screen-content">
-          <div className="ignite-empty-state">
-            <h3 className="ignite-empty-state-title">Discuss Screen</h3>
-            <p className="ignite-empty-state-description">Coming in Phase 4</p>
-          </div>
-        </div>
-      </div>
+      <DiscussScreen goalId={currentScreen.goalId} conversationId={currentScreen.conversationId} />
     );
   }
 
   if (isQAScreen(currentScreen)) {
-    return (
-      <div className="ignite-screen">
-        <div className="ignite-screen-content">
-          <div className="ignite-empty-state">
-            <h3 className="ignite-empty-state-title">Q&A Screen</h3>
-            <p className="ignite-empty-state-description">Coming in Phase 4</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <QAScreen goalId={currentScreen.goalId} />;
   }
 
   return (
