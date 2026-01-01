@@ -56,7 +56,9 @@ run_claude() {
   local exit_code=0
 
   # Run claude and capture exit code (--verbose shows tool calls and reasoning)
-  claude --verbose "$@" --max-turns "$max_turns" || exit_code=$?
+  # Use --model opus to use Opus 4.5
+  # Unset ANTHROPIC_API_KEY so claude CLI uses subscription auth instead of API billing
+  ANTHROPIC_API_KEY= claude --verbose --model opus "$@" --max-turns "$max_turns" || exit_code=$?
 
   local end_time=$(date +%s)
   local duration=$((end_time - start_time))
