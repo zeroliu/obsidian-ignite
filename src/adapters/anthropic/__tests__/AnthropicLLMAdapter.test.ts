@@ -38,7 +38,7 @@ describe('AnthropicLLMAdapter', () => {
 
     it('should use default model if not provided', () => {
       const defaultAdapter = new AnthropicLLMAdapter({ apiKey: 'test-key' });
-      expect(defaultAdapter.getModelName()).toBe('claude-3-5-sonnet-20241022');
+      expect(defaultAdapter.getModelName()).toBe('claude-haiku-4-5-20251001');
     });
   });
 

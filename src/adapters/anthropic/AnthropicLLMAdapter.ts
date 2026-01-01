@@ -63,7 +63,7 @@ type AnthropicStreamEvent =
  */
 export interface AnthropicLLMConfig {
   apiKey: string;
-  model?: string; // Default: claude-3-5-sonnet-20241022
+  model?: string; // Default: claude-haiku-4-5-20251001
   maxTokens?: number; // Default: 4096
   apiVersion?: string; // Default: 2023-06-01
   /** Maximum requests per minute. Default: 10 */
@@ -153,7 +153,7 @@ export class AnthropicLLMAdapter implements ILLMProvider {
       throw new Error('Anthropic API key is required');
     }
     this.apiKey = config.apiKey;
-    this.model = config.model ?? 'claude-3-5-sonnet-20241022';
+    this.model = config.model ?? 'claude-haiku-4-5-20251001';
     this.defaultMaxTokens = config.maxTokens ?? 4096;
     this.apiVersion = config.apiVersion ?? '2023-06-01';
     this.rateLimiter = new RateLimiter(config.maxRequestsPerMinute ?? 10);
